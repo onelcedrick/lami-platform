@@ -1,9 +1,257 @@
-# See full file in local project - placeholder structure
-# Full compose includes: mongodb, redis, rabbitmq, minio, gateway, microservices
+version: "3.9"
+
 services:
   mongodb:
     image: mongo:7
-    ports: ["27017:27017"]
+    container_name: lami-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: lami
+    networks:
+      - lami-network
+    restart: unless-stopped
+
   redis:
-    image: redis:7
-    ports: ["6379:6379"]
+    image: redis:7-alpine
+    container_name: lami-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - lami-network
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: lami-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: lami
+      MINIO_ROOT_PASSWORD: lami_secret_minio
+    volumes:
+      - minio_data:/data
+    networks:
+      - lami-network
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: lami-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: lami
+      RABBITMQ_DEFAULT_PASS: lami_secret
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - lami-network
+    restart: unless-stopped
+
+  user-service:
+    build:
+      context: ./backend
+      dockerfile: services/user/Dockerfile
+    container_name: lami-user
+    ports:
+      - "8082:8082"
+    environment:
+      APP_ENV: development
+      HTTP_PORT: "8082"
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: lami_auth
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+    depends_on:
+      - mongodb
+    networks:
+      - lami-network
+
+  auth-service:
+    build:
+      context: ./backend
+      dockerfile: services/auth/Dockerfile
+    container_name: lami-auth
+    ports:
+      - "8081:8081"
+    environment:
+      APP_ENV: development
+      HTTP_PORT: "8081"
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: lami_auth
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+    depends_on:
+      - mongodb
+    networks:
+      - lami-network
+
+  catalog-service:
+    build:
+      context: ./backend
+      dockerfile: services/catalog/Dockerfile
+    container_name: lami-catalog
+    ports:
+      - "8083:8083"
+    environment:
+      RABBITMQ_URL: amqp://lami:lami_secret@rabbitmq:5672/
+      APP_ENV: development
+      HTTP_PORT: "8083"
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: lami_catalog
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+    depends_on:
+      - rabbitmq
+      - mongodb
+    networks:
+      - lami-network
+
+  order-service:
+    build:
+      context: ./backend
+      dockerfile: services/order/Dockerfile
+    container_name: lami-order
+    ports:
+      - "8084:8084"
+    environment:
+      CATALOG_SERVICE_URL: http://catalog-service:8083
+      RABBITMQ_URL: amqp://lami:lami_secret@rabbitmq:5672/
+      MOMO_WEBHOOK_SECRET: lami-momo-webhook-dev
+      APP_ENV: development
+      HTTP_PORT: "8084"
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: lami_order
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+    depends_on:
+      - rabbitmq
+      - mongodb
+    networks:
+      - lami-network
+
+  ticket-service:
+    build:
+      context: ./backend
+      dockerfile: services/ticket/Dockerfile
+    container_name: lami-ticket
+    ports:
+      - "8085:8085"
+    environment:
+      STORAGE_DRIVER: minio
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: lami
+      MINIO_SECRET_KEY: lami_secret_minio
+      MINIO_BUCKET: lami-uploads
+      APP_ENV: development
+      HTTP_PORT: "8085"
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: lami_ticket
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+    depends_on:
+      - mongodb
+      - minio
+    volumes:
+      - ticket_uploads:/data/uploads
+    networks:
+      - lami-network
+
+  notification-service:
+    build:
+      context: ./backend
+      dockerfile: services/notification/Dockerfile
+    container_name: lami-notification
+    ports:
+      - "8086:8086"
+    environment:
+      RABBITMQ_URL: amqp://lami:lami_secret@rabbitmq:5672/
+      APP_ENV: development
+      HTTP_PORT: "8086"
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: lami_notification
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+    depends_on:
+      - rabbitmq
+      - mongodb
+    networks:
+      - lami-network
+
+  ia-service:
+    build:
+      context: ./backend
+      dockerfile: services/ia/Dockerfile
+    container_name: lami-ia
+    ports:
+      - "8090:8090"
+    environment:
+      APP_ENV: development
+      HTTP_PORT: "8090"
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: lami_ia
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+      LLM_PROVIDER: mock
+      CATALOG_SERVICE_URL: http://catalog-service:8083
+    depends_on:
+      - mongodb
+      - catalog-service
+    networks:
+      - lami-network
+
+  analytics-service:
+    build:
+      context: ./backend
+      dockerfile: services/analytics/Dockerfile
+    container_name: lami-analytics
+    ports:
+      - "8087:8087"
+    environment:
+      RABBITMQ_URL: amqp://lami:lami_secret@rabbitmq:5672/
+      APP_ENV: development
+      HTTP_PORT: "8087"
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: lami_analytics
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+    depends_on:
+      - rabbitmq
+      - mongodb
+    networks:
+      - lami-network
+
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: api-gateway/Dockerfile
+    container_name: lami-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: development
+      HTTP_PORT: "8000"
+      JWT_SECRET: lami-super-secret-key-change-in-production-2026
+      AUTH_SERVICE_URL: http://auth-service:8081
+      USER_SERVICE_URL: http://user-service:8082
+      CATALOG_SERVICE_URL: http://catalog-service:8083
+      ORDER_SERVICE_URL: http://order-service:8084
+      TICKET_SERVICE_URL: http://ticket-service:8085
+      NOTIF_SERVICE_URL: http://notification-service:8086
+      IA_SERVICE_URL: http://ia-service:8090
+      ANALYTICS_SERVICE_URL: http://analytics-service:8087
+      RATE_LIMIT: "120"
+    depends_on:
+      - auth-service
+      - catalog-service
+      - order-service
+    networks:
+      - lami-network
+
+volumes:
+  mongodb_data:
+  rabbitmq_data:
+  ticket_uploads:
+  minio_data:
+
+networks:
+  lami-network:
+    driver: bridge
