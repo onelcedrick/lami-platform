@@ -1,0 +1,9 @@
+# See full file in local project - placeholder structure
+# Full compose includes: mongodb, redis, rabbitmq, minio, gateway, microservices
+services:
+  mongodb:
+    image: mongo:7
+    ports: ["27017:27017"]
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
