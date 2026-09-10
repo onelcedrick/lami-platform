@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Build
+.next/
+out/
+dist/
+build/
+*.exe
+bin/
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs & uploads
+*.log
+uploads/
+tmp/
+.cache/
+
+# Go
+vendor/
+
+# Project artifacts
+*.zip
+.grok/
+.previewdocs/
+rendered/
