@@ -47,7 +47,9 @@ function qs(params?: Record<string, string | number | boolean | undefined>) {
 }
 
 export const api = {
+  // -------------------------------------------------------------------------
   // Auth
+  // -------------------------------------------------------------------------
   register: (body: {
     email: string;
     password: string;
@@ -67,7 +69,9 @@ export const api = {
       body: JSON.stringify({ refresh_token }),
     }),
 
+  // -------------------------------------------------------------------------
   // Catalog
+  // -------------------------------------------------------------------------
   listPopularProducts: (limit = 8) =>
     request(`/api/v1/catalog/products/popular?limit=${limit}`),
 
@@ -79,7 +83,6 @@ export const api = {
   getProductBySlug: (slug: string) =>
     request(`/api/v1/catalog/products/slug/${encodeURIComponent(slug)}`),
 
-
   listCategories: () => request("/api/v1/catalog/categories"),
 
   createProduct: (body: unknown) =>
@@ -90,7 +93,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ products }),
     }),
-
 
   updateProduct: (id: string, body: unknown) =>
     request(`/api/v1/catalog/products/${id}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -104,6 +106,47 @@ export const api = {
   seedCatalog: () =>
     request("/api/v1/catalog/seed", { method: "POST" }),
 
+  // -------------------------------------------------------------------------
+  // Catalog — Upload d'images produit
+  // (utilise fetch direct car FormData ne doit PAS avoir de Content-Type forcé)
+  // -------------------------------------------------------------------------
+  uploadProductImage: async (file: File) => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${API_BASE}/api/v1/catalog/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    return (await res.json()) as ApiResponse<{
+      url: string;
+      key: string;
+      size: number;
+      content_type: string;
+    }>;
+  },
+
+  uploadProductImages: async (files: File[]) => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    const fd = new FormData();
+    files.forEach((f) => fd.append("files", f));
+    const res = await fetch(`${API_BASE}/api/v1/catalog/upload-multiple`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    return (await res.json()) as ApiResponse<{
+      uploaded: { url: string; key: string; name: string }[];
+      errors: string[];
+    }>;
+  },
+
+  // -------------------------------------------------------------------------
+  // Discounts
+  // -------------------------------------------------------------------------
   listDiscounts: () => request("/api/v1/catalog/discounts"),
   listActiveDiscounts: () => request("/api/v1/catalog/discounts/active"),
   createDiscount: (body: unknown) =>
@@ -113,9 +156,9 @@ export const api = {
   deleteDiscount: (id: string) =>
     request(`/api/v1/catalog/discounts/${id}`, { method: "DELETE" }),
 
-
-
+  // -------------------------------------------------------------------------
   // Orders
+  // -------------------------------------------------------------------------
   createOrder: (body: unknown) =>
     request("/api/v1/orders", { method: "POST", body: JSON.stringify(body) }),
 
@@ -153,7 +196,6 @@ export const api = {
   getInvoicePDFUrl: (id: string) =>
     `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/orders/${id}/invoice.pdf`,
 
-
   getOrderStats: (days = 30) =>
     request(`/api/v1/orders/stats?days=${days}`),
 
@@ -163,7 +205,9 @@ export const api = {
   updateOrderStatus: (id: string, body: { status: string; payment_status?: string }) =>
     request(`/api/v1/orders/${id}/status`, { method: "PATCH", body: JSON.stringify(body) }),
 
+  // -------------------------------------------------------------------------
   // Tickets
+  // -------------------------------------------------------------------------
   createTicket: (body: {
     title: string;
     description: string;
@@ -196,7 +240,6 @@ export const api = {
     }),
 
   uploadTicketFile: async (file: File) => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const token =
       typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
     const fd = new FormData();
@@ -229,7 +272,9 @@ export const api = {
     category?: string;
   }) => request(`/api/v1/tickets${qs(params)}`),
 
+  // -------------------------------------------------------------------------
   // Notifications
+  // -------------------------------------------------------------------------
   myNotifications: (params?: { page?: number; limit?: number; unread?: boolean }) =>
     request(`/api/v1/notifications/me${qs(params)}`),
 
@@ -241,7 +286,9 @@ export const api = {
   markAllNotificationsRead: () =>
     request("/api/v1/notifications/read-all", { method: "POST" }),
 
+  // -------------------------------------------------------------------------
   // IA
+  // -------------------------------------------------------------------------
   iaChat: (body: { message: string; conversation_id?: string; mode?: string }) =>
     request("/api/v1/ia/chat", { method: "POST", body: JSON.stringify(body) }),
 
@@ -253,7 +300,9 @@ export const api = {
       body: JSON.stringify({ query, top_k }),
     }),
 
+  // -------------------------------------------------------------------------
   // Users / Profile
+  // -------------------------------------------------------------------------
   getProfile: () => request("/api/v1/users/me"),
   updateProfile: (body: unknown) =>
     request("/api/v1/users/me", { method: "PUT", body: JSON.stringify(body) }),
@@ -266,7 +315,9 @@ export const api = {
     request(`/api/v1/users/${id}/deactivate`, { method: "POST" }),
   listRegions: () => request("/api/v1/users/geo/regions"),
 
+  // -------------------------------------------------------------------------
   // Analytics
+  // -------------------------------------------------------------------------
   visitorStats: (days = 7) =>
     request(`/api/v1/analytics/visitors?days=${days}`),
 

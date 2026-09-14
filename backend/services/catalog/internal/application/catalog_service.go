@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	shareddomain "github.com/lami-platform/shared/domain"
+	"github.com/lami-platform/shared/pkg/logger"
 	"github.com/lami-platform/services/catalog/internal/domain"
 )
 
@@ -51,7 +52,6 @@ func (s *CatalogService) CreateProduct(ctx context.Context, req shareddomain.Cre
 		CompareAtPrice:   req.CompareAtPrice,
 		Stock:            req.Stock,
 		StockAlert:       req.StockAlert,
-		// IsActive:         true,
 		Images:           req.Images,
 		Attributes:       req.Attributes,
 		Tags:             req.Tags,
@@ -228,7 +228,6 @@ func (s *CatalogService) ApplyOrderCancelled(ctx context.Context, items []struct
 	return nil
 }
 
-
 func (s *CatalogService) UpdateProduct(ctx context.Context, id string, req shareddomain.CreateProductRequest) (*shareddomain.Product, error) {
 	product, err := s.productRepo.FindByID(ctx, id)
 	if err != nil {
@@ -367,18 +366,24 @@ func (s *CatalogService) SeedSampleProducts(ctx context.Context) error {
 		Sales, Views, Reviews int
 		Rating                float64
 	}{
-		"CPU-AMD-7800X3D":     {Sales: 48, Views: 920, Reviews: 34, Rating: 4.8},
-		"GPU-NV-4070TI":       {Sales: 36, Views: 1100, Reviews: 28, Rating: 4.7},
-		"RAM-COR-32GB-6000":   {Sales: 62, Views: 540, Reviews: 19, Rating: 4.5},
-		"SSD-SAM-990PRO-2T":   {Sales: 55, Views: 610, Reviews: 22, Rating: 4.9},
-		"PC-LAMI-ULTIMATE":    {Sales: 14, Views: 780, Reviews: 11, Rating: 4.6},
+		"CPU-AMD-7800X3D":   {Sales: 48, Views: 920, Reviews: 34, Rating: 4.8},
+		"GPU-NV-4070TI":     {Sales: 36, Views: 1100, Reviews: 28, Rating: 4.7},
+		"RAM-COR-32GB-6000": {Sales: 62, Views: 540, Reviews: 19, Rating: 4.5},
+		"SSD-SAM-990PRO-2T": {Sales: 55, Views: 610, Reviews: 22, Rating: 4.9},
+		"PC-LAMI-ULTIMATE":  {Sales: 14, Views: 780, Reviews: 11, Rating: 4.6},
 	}
 
 	for _, p := range samples {
-		existing, _ := s.productRepo.FindBySlug(ctx, slugify(p.Name))
+		// ✅ Idempotence par SKU (identifiant métier unique)
+		existing, err := s.productRepo.FindBySKU(ctx, p.SKU)
+		if err != nil {
+			return err
+		}
 		if existing != nil {
+			logger.Info().Str("sku", p.SKU).Msg("Seed: produit deja present, ignore")
 			continue
 		}
+
 		product, err := s.CreateProduct(ctx, p)
 		if err != nil {
 			return err

@@ -25,16 +25,11 @@ export default function AdminTicketsPage() {
         status: statusFilter || undefined,
       });
       if (res.success && res.data) setTickets(res.data as Ticket[]);
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
+    } catch { /* silent */ }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    load();
-  }, [statusFilter]);
+  useEffect(() => { load(); }, [statusFilter]);
 
   const handleStatus = async (status: string) => {
     if (!selected) return;
@@ -57,8 +52,12 @@ export default function AdminTicketsPage() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Tickets support</h1>
-          <p className="mt-1 text-slate-600">Vue globale de tous les tickets</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            Tickets support
+          </h1>
+          <p className="mt-1 text-slate-600 dark:text-slate-400">
+            Vue globale de tous les tickets
+          </p>
         </div>
         <select
           value={statusFilter}
@@ -67,15 +66,13 @@ export default function AdminTicketsPage() {
         >
           <option value="">Tous les statuts</option>
           {Object.entries(TICKET_STATUS_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
+            <option key={k} value={k}>{v}</option>
           ))}
         </select>
       </div>
 
       {message && (
-        <div className="mt-4 rounded-lg bg-primary-50 px-4 py-2 text-sm text-primary-800">
+        <div className="mt-4 rounded-lg bg-primary-50 px-4 py-2 text-sm text-primary-800 dark:bg-primary-500/15 dark:text-primary-200">
           {message}
         </div>
       )}
@@ -83,7 +80,7 @@ export default function AdminTicketsPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-5">
         <div className="card overflow-hidden lg:col-span-3">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
               <tr>
                 <th className="px-4 py-3">Ticket</th>
                 <th className="px-4 py-3">Priorite</th>
@@ -91,16 +88,16 @@ export default function AdminTicketsPage() {
                 <th className="px-4 py-3">Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400 dark:text-slate-500">
                     Chargement...
                   </td>
                 </tr>
               ) : tickets.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400 dark:text-slate-500">
                     Aucun ticket
                   </td>
                 </tr>
@@ -109,27 +106,27 @@ export default function AdminTicketsPage() {
                   <tr
                     key={t.id}
                     onClick={() => setSelected(t)}
-                    className={`cursor-pointer hover:bg-slate-50 ${
-                      selected?.id === t.id ? "bg-primary-50" : ""
+                    className={`cursor-pointer transition ${
+                      selected?.id === t.id
+                        ? "bg-primary-50 dark:bg-primary-500/10"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
                     }`}
                   >
                     <td className="px-4 py-3">
-                      <p className="font-medium text-slate-900 line-clamp-1">{t.title}</p>
-                      <p className="text-xs text-slate-400">{t.ticket_number}</p>
+                      <p className="font-medium text-slate-900 line-clamp-1 dark:text-slate-100">
+                        {t.title}
+                      </p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
+                        {t.ticket_number}
+                      </p>
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge
-                        status={t.priority}
-                        label={TICKET_PRIORITY_LABELS[t.priority]}
-                      />
+                      <StatusBadge status={t.priority} label={TICKET_PRIORITY_LABELS[t.priority]} />
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge
-                        status={t.status}
-                        label={TICKET_STATUS_LABELS[t.status]}
-                      />
+                      <StatusBadge status={t.status} label={TICKET_STATUS_LABELS[t.status]} />
                     </td>
-                    <td className="px-4 py-3 text-slate-500">
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
                       {new Date(t.created_at).toLocaleDateString("fr-FR")}
                     </td>
                   </tr>
@@ -143,24 +140,22 @@ export default function AdminTicketsPage() {
           {selected ? (
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-slate-400">{selected.ticket_number}</p>
-                <h2 className="font-semibold text-slate-900">{selected.title}</h2>
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  {selected.ticket_number}
+                </p>
+                <h2 className="font-semibold text-slate-900 dark:text-slate-100">
+                  {selected.title}
+                </h2>
               </div>
-              <p className="text-sm text-slate-600 whitespace-pre-wrap">
+              <p className="text-sm text-slate-600 whitespace-pre-wrap dark:text-slate-300">
                 {selected.description}
               </p>
               <div className="flex gap-2">
-                <StatusBadge
-                  status={selected.status}
-                  label={TICKET_STATUS_LABELS[selected.status]}
-                />
-                <StatusBadge
-                  status={selected.priority}
-                  label={TICKET_PRIORITY_LABELS[selected.priority]}
-                />
+                <StatusBadge status={selected.status} label={TICKET_STATUS_LABELS[selected.status]} />
+                <StatusBadge status={selected.priority} label={TICKET_PRIORITY_LABELS[selected.priority]} />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium uppercase text-slate-400">
+                <label className="mb-1.5 block text-xs font-medium uppercase text-slate-400 dark:text-slate-500">
                   Note interne
                 </label>
                 <textarea
@@ -172,31 +167,26 @@ export default function AdminTicketsPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {["in_progress", "waiting", "resolved", "closed"].map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => handleStatus(s)}
-                    className="btn-secondary text-xs"
-                  >
+                  <button key={s} onClick={() => handleStatus(s)} className="btn-secondary text-xs">
                     {TICKET_STATUS_LABELS[s]}
                   </button>
                 ))}
               </div>
               {selected.messages && selected.messages.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium uppercase text-slate-400">
+                  <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500">
                     Messages
                   </p>
                   <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto">
                     {selected.messages.map((m) => (
                       <li
                         key={m.id}
-                        className="rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                        className="rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60"
                       >
-                        <p className="text-xs text-slate-400">
-                          {m.author_role} —{" "}
-                          {new Date(m.created_at).toLocaleString("fr-FR")}
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                          {m.author_role} — {new Date(m.created_at).toLocaleString("fr-FR")}
                         </p>
-                        <p className="mt-0.5">{m.content}</p>
+                        <p className="mt-0.5 text-slate-700 dark:text-slate-300">{m.content}</p>
                       </li>
                     ))}
                   </ul>
@@ -204,7 +194,7 @@ export default function AdminTicketsPage() {
               )}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-400 dark:text-slate-500">
               Selectionnez un ticket pour voir le detail
             </p>
           )}

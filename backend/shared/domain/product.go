@@ -86,6 +86,7 @@ type ProductFilter struct {
 	Search     string   `json:"search,omitempty"`
 	Status     string   `json:"status,omitempty"`
 	IsFeatured *bool    `json:"is_featured,omitempty"`
+	InStock    *bool    `json:"in_stock,omitempty"`
 	Page       int      `json:"page"`
 	Limit      int      `json:"limit"`
 	SortBy     string   `json:"sort_by"`

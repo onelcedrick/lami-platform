@@ -66,10 +66,10 @@ export default function ProductDetailPage() {
         api.listActiveDiscounts().then((dr) => {
           if (dr.success && dr.data) setDiscounts(dr.data as Discount[]);
         });
-        // 1) Par slug (lien partage)
+        // 1) Par slug (lien partagé)
         let res = await api.getProductBySlug(slug);
         if ((!res.success || !res.data) && slug.length > 8) {
-          // 2) Fallback : id direct (anciens liens /admin)
+          // 2) Fallback : id direct
           res = await api.getProduct(slug);
         }
         if (!cancelled) {
@@ -91,6 +91,28 @@ export default function ProductDetailPage() {
       cancelled = true;
     };
   }, [slug]);
+
+  // ✅ Reset de l'image active quand le slug change
+  useEffect(() => {
+    setActiveImage(0);
+  }, [slug]);
+
+  // ✅ Navigation clavier (← →)
+  useEffect(() => {
+    if (!product?.images || product.images.length < 2) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        setActiveImage(
+          (i) => (i - 1 + product.images!.length) % product.images!.length
+        );
+      } else if (e.key === "ArrowRight") {
+        setActiveImage((i) => (i + 1) % product.images!.length);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [product]);
 
   const handleAdd = () => {
     if (!product || product.stock <= 0) return;
@@ -130,7 +152,7 @@ export default function ProductDetailPage() {
           Produit introuvable
         </h1>
         <p className="mt-2 text-slate-500">
-          {error || "Ce lien n'est plus valide ou le produit a ete retire."}
+          {error || "Ce lien n'est plus valide ou le produit a été retiré."}
         </p>
         <Link href="/catalog" className="btn-primary mt-6 inline-flex">
           Retour au catalogue
@@ -160,27 +182,65 @@ export default function ProductDetailPage() {
       </nav>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        {/* Galerie */}
+        {/* ✅ Galerie enrichie */}
         <div>
-          <div className="card flex aspect-square items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+          <div className="group relative card flex aspect-square items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-900/50">
             <LazyImage
               src={images[activeImage]}
               alt={product.name}
               fallbackText={product.brand}
             />
+
+            {/* Compteur */}
+            {images.length > 1 && (
+              <span className="absolute right-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
+                {activeImage + 1} / {images.length}
+              </span>
+            )}
+
+            {/* Flèches (visibles au survol) */}
+            {images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActiveImage(
+                      (i) => (i - 1 + images.length) % images.length
+                    )
+                  }
+                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 text-slate-700 opacity-0 shadow-md transition hover:bg-white group-hover:opacity-100"
+                  aria-label="Image précédente"
+                >
+                  <ChevronRightIcon size={18} className="rotate-180" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActiveImage((i) => (i + 1) % images.length)
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 text-slate-700 opacity-0 shadow-md transition hover:bg-white group-hover:opacity-100"
+                  aria-label="Image suivante"
+                >
+                  <ChevronRightIcon size={18} />
+                </button>
+              </>
+            )}
           </div>
+
+          {/* Vignettes */}
           {images.length > 1 && (
-            <div className="mt-3 flex gap-2 overflow-x-auto">
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
               {images.map((src, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => setActiveImage(i)}
-                  className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 ${
+                  className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition ${
                     i === activeImage
-                      ? "border-primary-500"
-                      : "border-transparent"
+                      ? "border-primary-500 ring-2 ring-primary-200"
+                      : "border-transparent opacity-70 hover:opacity-100"
                   }`}
+                  aria-label={`Voir image ${i + 1}`}
                 >
                   <LazyImage src={src} alt="" fallbackText={String(i + 1)} />
                 </button>
@@ -243,7 +303,9 @@ export default function ProductDetailPage() {
                       product.compare_at_price > product.price)) && (
                     <span className="text-lg text-slate-400 line-through">
                       {formatAriary(
-                        hasPromo ? product.price : (product.compare_at_price as number)
+                        hasPromo
+                          ? product.price
+                          : (product.compare_at_price as number)
                       )}
                     </span>
                   )}
@@ -260,7 +322,9 @@ export default function ProductDetailPage() {
             }`}
           >
             {product.stock > 0
-              ? `En stock (${product.stock} disponible${product.stock > 1 ? "s" : ""})`
+              ? `En stock (${product.stock} disponible${
+                  product.stock > 1 ? "s" : ""
+                })`
               : "Rupture de stock"}
           </p>
 
@@ -277,7 +341,7 @@ export default function ProductDetailPage() {
                 type="button"
                 className="px-3 py-2 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
                 onClick={() => setQty((q) => Math.max(1, q - 1))}
-                aria-label="Diminuer quantite"
+                aria-label="Diminuer quantité"
               >
                 −
               </button>
@@ -290,7 +354,7 @@ export default function ProductDetailPage() {
                 onClick={() =>
                   setQty((q) => Math.min(product.stock || 1, q + 1))
                 }
-                aria-label="Augmenter quantite"
+                aria-label="Augmenter quantité"
               >
                 +
               </button>
@@ -303,13 +367,10 @@ export default function ProductDetailPage() {
               className="btn-primary disabled:opacity-50"
             >
               <CartIcon size={18} />
-              {added ? "Ajoute au panier" : "Ajouter au panier"}
+              {added ? "Ajouté au panier" : "Ajouter au panier"}
             </button>
 
-            <ShareProductButton
-              productName={product.name}
-              path={sharePath}
-            />
+            <ShareProductButton productName={product.name} path={sharePath} />
             <FavoriteButton
               product={product}
               size={22}
@@ -317,7 +378,7 @@ export default function ProductDetailPage() {
             />
           </div>
 
-          {/* Lien partage visible */}
+          {/* Lien partagé visible */}
           <div className="mt-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-900/50">
             <p className="text-xs font-medium uppercase text-slate-400">
               Lien partageable
@@ -363,7 +424,7 @@ export default function ProductDetailPage() {
       {product.attributes && Object.keys(product.attributes).length > 0 && (
         <section className="card mt-6 p-6">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-            Caracteristiques
+            Caractéristiques
           </h2>
           <dl className="mt-4 grid gap-3 sm:grid-cols-2">
             {Object.entries(product.attributes).map(([k, v]) => (

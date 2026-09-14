@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { LogoIcon } from "@/components/ui/icons";
+import { getHomePathForRole } from "@/lib/auth-routing";
 
 function OAuthCallbackInner() {
   const router = useRouter();
@@ -43,7 +44,7 @@ function OAuthCallbackInner() {
             role: string;
           };
           setAuth(user, accessToken, refreshToken);
-          router.replace("/");
+          router.replace(getHomePathForRole(user.role));
         } else {
           // Fallback: decoder minimal depuis le token n'est pas ideal;
           // rediriger vers login si profil indisponible
@@ -58,7 +59,7 @@ function OAuthCallbackInner() {
             accessToken,
             refreshToken
           );
-          router.replace("/");
+          router.replace(getHomePathForRole("client"));
         }
       })
       .catch(() => {

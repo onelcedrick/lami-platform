@@ -10,12 +10,14 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
+	shareddomain "github.com/lami-platform/shared/domain"
 	"github.com/lami-platform/shared/pkg/config"
+	"github.com/lami-platform/shared/pkg/events"
 	"github.com/lami-platform/shared/pkg/logger"
 	"github.com/lami-platform/shared/pkg/middleware"
 	"github.com/lami-platform/shared/pkg/mongodb"
 	"github.com/lami-platform/shared/pkg/rabbitmq"
-	"github.com/lami-platform/shared/pkg/events"
+	"github.com/lami-platform/shared/pkg/storage"
 	"github.com/lami-platform/services/catalog/internal/application"
 	"github.com/lami-platform/services/catalog/internal/infrastructure"
 	httpHandler "github.com/lami-platform/services/catalog/internal/interfaces/http"
@@ -41,7 +43,15 @@ func main() {
 	categoryRepo := infrastructure.NewMongoCategoryRepository(mongoClient)
 	discountRepo := infrastructure.NewMongoDiscountRepository(mongoClient)
 	catalogService := application.NewCatalogService(productRepo, categoryRepo, discountRepo)
-	handler := httpHandler.NewCatalogHandler(catalogService)
+
+	// ✅ Object store (local ou MinIO selon l'env)
+	store, err := storage.NewFromEnv()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Impossible d'initialiser l'object store")
+	}
+	logger.Info().Msg("Object store initialise")
+
+	handler := httpHandler.NewCatalogHandler(catalogService, store)
 
 	// Consumer evenements commande → stock / ventes
 	if rmq, err := rabbitmq.Connect(cfg.RabbitURL); err != nil {
@@ -58,9 +68,23 @@ func main() {
 	// Seed automatique au demarrage (dev)
 	go func() {
 		time.Sleep(2 * time.Second)
+
+		// Catégories : idempotent par slug (déjà géré dans SeedCategories)
 		_ = catalogService.SeedCategories(context.Background())
-		_ = catalogService.SeedSampleProducts(context.Background())
-		logger.Info().Msg("Donnees de demonstration chargees")
+
+		// ✅ Garde-fou : ne seeder les produits que si la base est vide
+		_, total, err := catalogService.ListProducts(
+			context.Background(),
+			shareddomain.ProductFilter{Page: 1, Limit: 1},
+		)
+		if err == nil && total == 0 {
+			_ = catalogService.SeedSampleProducts(context.Background())
+			logger.Info().Msg("Donnees de demonstration chargees (base vide)")
+		} else {
+			logger.Info().
+				Int64("existing_products", total).
+				Msg("Seed ignore (produits deja presents)")
+		}
 	}()
 
 	app := fiber.New(fiber.Config{

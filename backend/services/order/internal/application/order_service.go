@@ -331,14 +331,26 @@ func (s *OrderService) PayOrder(ctx context.Context, id, userID, method, phone s
 		}
 	}
 
-	// En production: appel API MVola/Orange/Airtel.
-	// Ici on marque "pending" jusqu'a confirmation (ou paid pour store).
+	// Boutique : en attente de paiement physique.
+	// Mobile Money : en simulation on valide automatiquement (paid).
+	// En production: initier API operateur puis ConfirmPayment via webhook.
 	if method == "store" {
 		order.PaymentStatus = shareddomain.PaymentStatusPending
 		order.Status = shareddomain.OrderStatusConfirmed
 	} else {
-		order.PaymentStatus = shareddomain.PaymentStatusPending
+		// mvola / orange_money / airtel_money / mobile_money — simulation: paye immediatement
+		order.PaymentStatus = shareddomain.PaymentStatusPaid
 		order.Status = shareddomain.OrderStatusConfirmed
+		s.publish(ctx, events.RoutingOrderPaid, events.OrderPaidEvent{
+			EventID:       uuid.New().String(),
+			OccurredAt:    time.Now().UTC(),
+			OrderID:       order.ID,
+			OrderNumber:   order.OrderNumber,
+			UserID:        order.UserID,
+			Items:         s.itemsToEvents(order.Items),
+			Total:         order.Total,
+			PaymentMethod: method,
+		})
 	}
 	order.UpdatedAt = time.Now().UTC()
 
@@ -464,7 +476,7 @@ func (s *OrderService) BuildInvoicePDF(ctx context.Context, orderID string) ([]b
 	}
 	data := pdf.SimpleInvoice(
 		"FACTURE L'AMI",
-		"L'AMI - Assistance Informatique, Toamasina",
+		"L'AMI - Assistance Informatique, Fianarantsoa",
 		order.InvoiceNumber,
 		order.OrderNumber,
 		order.CreatedAt.Format("2006-01-02"),

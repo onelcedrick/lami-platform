@@ -38,27 +38,16 @@ export default function AdminUsersPage() {
     setLoading(true);
     try {
       const [listRes, statsRes] = await Promise.all([
-        api.listUsers({
-          limit: 50,
-          search: search || undefined,
-          role: roleFilter || undefined,
-        }),
+        api.listUsers({ limit: 50, search: search || undefined, role: roleFilter || undefined }),
         api.userStats(),
       ]);
       if (listRes.success && listRes.data) setUsers(listRes.data as UserRow[]);
-      if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data as Record<string, number>);
-      }
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
+      if (statsRes.success && statsRes.data) setStats(statsRes.data as Record<string, number>);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    load();
-  }, [search, roleFilter]);
+  useEffect(() => { load(); }, [search, roleFilter]);
 
   const handleUpdateRole = async () => {
     if (!selected || !editRole) return;
@@ -82,25 +71,25 @@ export default function AdminUsersPage() {
         setMessage("Utilisateur desactive");
         load();
         setSelected({ ...selected, is_active: false });
-      } else {
-        setMessage(res.error || "Erreur");
-      }
+      } else setMessage(res.error || "Erreur");
     } else {
       const res = await api.adminUpdateUser(selected.id, { is_active: true });
       if (res.success) {
         setMessage("Utilisateur reactive");
         load();
         setSelected({ ...selected, is_active: true });
-      } else {
-        setMessage(res.error || "Erreur");
-      }
+      } else setMessage(res.error || "Erreur");
     }
   };
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900">Utilisateurs</h1>
-      <p className="mt-1 text-slate-600">Gestion des comptes et roles (RBAC)</p>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+        Utilisateurs
+      </h1>
+      <p className="mt-1 text-slate-600 dark:text-slate-400">
+        Gestion des comptes et roles (RBAC)
+      </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-4">
         {[
@@ -110,8 +99,10 @@ export default function AdminUsersPage() {
           { label: "Admins", key: "admin" },
         ].map((k) => (
           <div key={k.key} className="card p-4">
-            <p className="text-xs font-medium uppercase text-slate-400">{k.label}</p>
-            <p className="mt-1 text-2xl font-bold text-slate-900">
+            <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500">
+              {k.label}
+            </p>
+            <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
               {stats[k.key] ?? "—"}
             </p>
           </div>
@@ -119,7 +110,7 @@ export default function AdminUsersPage() {
       </div>
 
       {message && (
-        <div className="mt-4 rounded-lg bg-primary-50 px-4 py-2 text-sm text-primary-800">
+        <div className="mt-4 rounded-lg bg-primary-50 px-4 py-2 text-sm text-primary-800 dark:bg-primary-500/15 dark:text-primary-200">
           {message}
         </div>
       )}
@@ -139,9 +130,7 @@ export default function AdminUsersPage() {
         >
           <option value="">Tous les roles</option>
           {Object.entries(ROLE_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
+            <option key={k} value={k}>{v}</option>
           ))}
         </select>
       </div>
@@ -149,7 +138,7 @@ export default function AdminUsersPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-5">
         <div className="card overflow-hidden lg:col-span-3">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
               <tr>
                 <th className="px-4 py-3">Utilisateur</th>
                 <th className="px-4 py-3">Role</th>
@@ -157,16 +146,16 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3">Statut</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400 dark:text-slate-500">
                     Chargement...
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400 dark:text-slate-500">
                     Aucun utilisateur
                   </td>
                 </tr>
@@ -174,22 +163,23 @@ export default function AdminUsersPage() {
                 users.map((u) => (
                   <tr
                     key={u.id}
-                    onClick={() => {
-                      setSelected(u);
-                      setEditRole(u.role);
-                    }}
-                    className={`cursor-pointer hover:bg-slate-50 ${
-                      selected?.id === u.id ? "bg-primary-50" : ""
+                    onClick={() => { setSelected(u); setEditRole(u.role); }}
+                    className={`cursor-pointer transition ${
+                      selected?.id === u.id
+                        ? "bg-primary-50 dark:bg-primary-500/10"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
                     }`}
                   >
                     <td className="px-4 py-3">
-                      <p className="font-medium text-slate-900">
+                      <p className="font-medium text-slate-900 dark:text-slate-100">
                         {u.first_name} {u.last_name}
                       </p>
-                      <p className="text-xs text-slate-400">{u.email}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">{u.email}</p>
                     </td>
-                    <td className="px-4 py-3">{ROLE_LABELS[u.role] || u.role}</td>
-                    <td className="px-4 py-3 text-slate-500">
+                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                      {ROLE_LABELS[u.role] || u.role}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
                       {u.address?.city || u.address?.region || "—"}
                     </td>
                     <td className="px-4 py-3">
@@ -208,23 +198,22 @@ export default function AdminUsersPage() {
         <div className="card p-5 lg:col-span-2">
           {selected ? (
             <div className="space-y-4">
-              <h2 className="font-semibold text-slate-900">
+              <h2 className="font-semibold text-slate-900 dark:text-slate-100">
                 {selected.first_name} {selected.last_name}
               </h2>
-              <p className="text-sm text-slate-500">{selected.email}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{selected.email}</p>
               {selected.phone && (
-                <p className="text-sm text-slate-600">{selected.phone}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">{selected.phone}</p>
               )}
               {selected.address && (
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
                   {[selected.address.city, selected.address.region, selected.address.province]
-                    .filter(Boolean)
-                    .join(", ")}
+                    .filter(Boolean).join(", ")}
                   {selected.address.country ? ` — ${selected.address.country}` : ""}
                 </p>
               )}
               <div>
-                <label className="mb-1.5 block text-xs font-medium uppercase text-slate-400">
+                <label className="mb-1.5 block text-xs font-medium uppercase text-slate-400 dark:text-slate-500">
                   Role
                 </label>
                 <select
@@ -233,9 +222,7 @@ export default function AdminUsersPage() {
                   className="input-field"
                 >
                   {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
+                    <option key={k} value={k}>{v}</option>
                   ))}
                 </select>
                 <button onClick={handleUpdateRole} className="btn-primary mt-2 w-full text-sm">
@@ -245,14 +232,16 @@ export default function AdminUsersPage() {
               <button
                 onClick={handleToggleActive}
                 className={`btn-secondary w-full text-sm ${
-                  selected.is_active ? "text-red-600" : "text-emerald-600"
+                  selected.is_active ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
                 }`}
               >
                 {selected.is_active ? "Desactiver le compte" : "Reactiver le compte"}
               </button>
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Selectionnez un utilisateur</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">
+              Selectionnez un utilisateur
+            </p>
           )}
         </div>
       </div>

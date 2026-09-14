@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/analytics";
 import { useAuthStore } from "@/lib/store";
 import { LogoIcon } from "@/components/ui/icons";
 import { syncAccountState } from "@/lib/sync-account";
+import { getHomePathForRole } from "@/lib/auth-routing";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,7 +45,7 @@ export default function LoginPage() {
       setAuth(data.user, data.access_token, data.refresh_token);
       void syncAccountState();
       void logActivity({ action: "login", category: "auth", message: "Connexion utilisateur" });
-      router.push("/");
+      router.push(getHomePathForRole(data.user.role));
     } catch {
       setError("Impossible de contacter le serveur");
     } finally {

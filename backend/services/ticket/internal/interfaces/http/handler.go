@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"context"
 	"bufio"
+	"os"
 	"path/filepath"
 	"strings"
 	"strconv"
@@ -255,10 +256,18 @@ func (h *TicketHandler) UploadFile(c *fiber.Ctx) error {
 		return response.InternalError(c, "Echec upload: "+err.Error())
 	}
 
+	// URL via API gateway pour lisibilite multi-navigateur (pas seulement MinIO interne)
+	publicURL := "/api/v1/tickets/files/" + key
+	if url != "" && (strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")) {
+		// garder URL publique MinIO si configuree explicitement hors reseau docker
+		if !strings.Contains(url, "minio:") && !strings.Contains(url, "9000") {
+			publicURL = url
+		}
+	}
 	att := shareddomain.Attachment{
 		ID:       id,
 		Name:     file.Filename,
-		URL:      url,
+		URL:      publicURL,
 		MimeType: mime,
 		Size:     file.Size,
 	}

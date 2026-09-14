@@ -1,5 +1,17 @@
+/**
+ * Stores Zustand — L'AMI
+ *
+ * ⚠️ Tous les stores utilisent `skipHydration: true` pour éviter les
+ * erreurs d'hydratation SSR/CSR. La réhydratation est déclenchée côté
+ * client par <StoreHydrator /> dans le layout racine.
+ */
+
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export interface User {
   id: string;
@@ -14,11 +26,24 @@ interface AuthState {
   user: User | null;
   accessToken: string | null;
   refreshToken: string | null;
+
+  // Actions
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   logout: () => void;
+
+  // Sélecteurs de rôle
   isAuthenticated: () => boolean;
   isAdmin: () => boolean;
+  isTechnician: () => boolean;
+  isClient: () => boolean;
+
+  // Navigation
+  getHomePath: () => string;
 }
+
+// ---------------------------------------------------------------------------
+// Auth Store
+// ---------------------------------------------------------------------------
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -26,41 +51,85 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: null,
       refreshToken: null,
+
       setAuth: (user, accessToken, refreshToken) => {
+        // Duplication dans localStorage pour les fetch directs
+        // (SSE, uploads, requêtes hors axios)
         if (typeof window !== "undefined") {
           localStorage.setItem("access_token", accessToken);
           localStorage.setItem("refresh_token", refreshToken);
         }
         set({ user, accessToken, refreshToken });
       },
+
       logout: () => {
         if (typeof window !== "undefined") {
           localStorage.removeItem("access_token");
           localStorage.removeItem("refresh_token");
         }
         set({ user: null, accessToken: null, refreshToken: null });
-        // Panier / favoris sont lies au compte : ne pas les laisser pour le suivant
-        try {
-          useCartStore.getState().clear();
-          useFavoritesStore.getState().clear();
-        } catch {
-          /* stores may not be ready */
-        }
+
+        // Nettoyage différé pour éviter les dépendances circulaires
+        setTimeout(() => {
+          try {
+            useCartStore.getState().clear();
+            useFavoritesStore.getState().clear();
+          } catch {
+            /* stores non prêts */
+          }
+        }, 0);
       },
+
+      // ----- Sélecteurs de rôle -----
+
       isAuthenticated: () => !!get().accessToken,
+
       isAdmin: () => {
         const role = get().user?.role;
         return role === "admin" || role === "super_admin";
       },
+
+      isTechnician: () => get().user?.role === "technician",
+
+      isClient: () => {
+        const role = get().user?.role;
+        return !role || role === "client";
+      },
+
+      // ----- Navigation -----
+
+      /**
+       * Retourne la route d'accueil selon le rôle.
+       * - admin/super_admin → /admin/dashboard
+       * - technician        → /technician/dashboard
+       * - client (défaut)   → /
+       */
+      getHomePath: () => {
+        const role = get().user?.role;
+        if (role === "admin" || role === "super_admin") {
+          return "/admin/dashboard";
+        }
+        if (role === "technician") {
+          return "/technician/dashboard";
+        }
+        return "/";
+      },
     }),
-    { name: "lami-auth" }
+    {
+      name: "lami-auth",
+      skipHydration: true,
+    }
   )
 );
 
-interface CartItem {
+// ---------------------------------------------------------------------------
+// Panier
+// ---------------------------------------------------------------------------
+
+export interface CartItem {
   productId: string;
   name: string;
-  price: number;
+  price: number; // en Ariary
   quantity: number;
   image?: string;
 }
@@ -79,8 +148,11 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
+
       addItem: (item) => {
-        const existing = get().items.find((i) => i.productId === item.productId);
+        const existing = get().items.find(
+          (i) => i.productId === item.productId
+        );
         if (existing) {
           set({
             items: get().items.map((i) =>
@@ -93,22 +165,35 @@ export const useCartStore = create<CartState>()(
           set({ items: [...get().items, item] });
         }
       },
+
       removeItem: (productId) =>
         set({ items: get().items.filter((i) => i.productId !== productId) }),
+
       updateQuantity: (productId, quantity) =>
         set({
           items: get().items.map((i) =>
             i.productId === productId ? { ...i, quantity } : i
           ),
         }),
+
       clear: () => set({ items: [] }),
+
       total: () =>
         get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
-      count: () => get().items.length, // nombre de produits distincts (pas quantites)
+
+      // Nombre de produits distincts (pas la somme des quantités)
+      count: () => get().items.length,
     }),
-    { name: "lami-cart" }
+    {
+      name: "lami-cart",
+      skipHydration: true,
+    }
   )
 );
+
+// ---------------------------------------------------------------------------
+// Favoris
+// ---------------------------------------------------------------------------
 
 export interface FavoriteItem {
   productId: string;
@@ -133,8 +218,11 @@ export const useFavoritesStore = create<FavoritesState>()(
   persist(
     (set, get) => ({
       items: [],
+
       toggle: (item) => {
-        const exists = get().items.some((i) => i.productId === item.productId);
+        const exists = get().items.some(
+          (i) => i.productId === item.productId
+        );
         if (exists) {
           set({
             items: get().items.filter((i) => i.productId !== item.productId),
@@ -143,13 +231,20 @@ export const useFavoritesStore = create<FavoritesState>()(
           set({ items: [...get().items, item] });
         }
       },
+
       remove: (productId) =>
         set({ items: get().items.filter((i) => i.productId !== productId) }),
+
       isFavorite: (productId) =>
         get().items.some((i) => i.productId === productId),
+
       count: () => get().items.length,
+
       clear: () => set({ items: [] }),
     }),
-    { name: "lami-favorites" }
+    {
+      name: "lami-favorites",
+      skipHydration: true,
+    }
   )
 );

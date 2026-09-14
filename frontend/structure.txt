@@ -1,0 +1,105 @@
+.
+├── app
+│   ├── admin
+│   │   ├── analytics
+│   │   ├── dashboard
+│   │   ├── discounts
+│   │   ├── layout.tsx
+│   │   ├── logs
+│   │   ├── orders
+│   │   ├── products
+│   │   ├── reports
+│   │   ├── settings
+│   │   ├── tickets
+│   │   └── users
+│   ├── (auth)
+│   │   ├── login
+│   │   └── register
+│   ├── auth
+│   │   └── callback
+│   ├── (client)
+│   │   ├── cart
+│   │   ├── catalog
+│   │   ├── favorites
+│   │   ├── orders
+│   │   ├── product
+│   │   ├── profile
+│   │   └── tickets
+│   ├── globals.css
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── robots.ts
+│   ├── sitemap.ts
+│   └── technician
+│       ├── dashboard
+│       ├── layout.tsx
+│       └── tickets
+├── components
+│   ├── admin
+│   │   └── ProductImportModal.tsx
+│   ├── analytics
+│   │   └── VisitorTracker.tsx
+│   ├── auth
+│   ├── catalog
+│   │   ├── FavoriteButton.tsx
+│   │   ├── ProductCard.tsx
+│   │   └── ShareProductButton.tsx
+│   ├── chat
+│   │   └── ChatWidget.tsx
+│   ├── home
+│   │   ├── NewArrivals.tsx
+│   │   └── PopularProducts.tsx
+│   ├── layout
+│   │   ├── AdminSidebar.tsx
+│   │   ├── Footer.tsx
+│   │   ├── Header.tsx
+│   │   └── TechSidebar.tsx
+│   ├── orders
+│   │   └── MobileMoneyModal.tsx
+│   ├── providers
+│   │   ├── AccountSyncProvider.tsx
+│   │   ├── StoreHydrator.tsx
+│   │   └── ThemeProvider.tsx
+│   ├── search
+│   │   └── SmartSearch.tsx
+│   ├── seo
+│   │   └── JsonLd.tsx
+│   ├── tickets
+│   │   └── TicketChat.tsx
+│   └── ui
+│       ├── icons.tsx
+│       ├── LazyImage.tsx
+│       ├── ScrollToTop.tsx
+│       ├── StatusBadge.tsx
+│       └── ThemeToggle.tsx
+├── e2e
+│   └── smoke.spec.ts
+├── lib
+│   ├── analytics.ts
+│   ├── api.ts
+│   ├── currency.ts
+│   ├── discount.ts
+│   ├── geo.ts
+│   ├── popularity.ts
+│   ├── product-import.ts
+│   ├── search.ts
+│   ├── seo-product.ts
+│   ├── store.ts
+│   ├── sync-account.ts
+│   ├── theme-store.ts
+│   └── types.ts
+├── next.config.js
+├── next-env.d.ts
+├── package.json
+├── package-lock.json
+├── playwright.config.ts
+├── postcss.config.js
+├── public
+│   └── icons
+├── README.md
+├── structure.txt
+├── styles
+├── tailwind.config.ts
+└── tsconfig.json
+
+48 directories, 55 files

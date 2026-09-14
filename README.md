@@ -125,3 +125,12 @@ lami-platform/
 ## Academique
 
 Projet Master II — L'AMI (Assistance & Maintenance Informatique).
+
+
+
+
+
+
+
+
+

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Header from "@/components/layout/Header";
+// import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import ChatWidget from "@/components/chat/ChatWidget";
 import JsonLd from "@/components/seo/JsonLd";
@@ -10,6 +10,7 @@ import StoreHydrator from "@/components/providers/StoreHydrator";
 import ScrollToTop from "@/components/ui/ScrollToTop";
 import VisitorTracker from "@/components/analytics/VisitorTracker";
 import { SEO_DEFAULTS } from "@/lib/geo";
+import ChromeShell from "@/components/layout/ChromeShell";
 
 // ---------------------------------------------------------------------------
 // Metadata
@@ -75,10 +76,11 @@ const themeInitScript = `
     var theme = JSON.parse(stored).state && JSON.parse(stored).state.theme;
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
+      document.documentElement.style.colorScheme = 'dark';
+    } else {
+      document.documentElement.style.colorScheme = 'light';
     }
-  } catch (e) {
-    /* silent */
-  }
+  } catch (e) {}
 })();
 `;
 
@@ -104,13 +106,7 @@ export default function RootLayout({
         <ThemeProvider>
           <AccountSyncProvider>
             <StoreHydrator>
-              <JsonLd />
-              <Header />
-              <main className="flex-1">{children}</main>
-              <Footer />
-              <ChatWidget />
-              <ScrollToTop />
-              <VisitorTracker />
+            <ChromeShell>{children}</ChromeShell>
             </StoreHydrator>
           </AccountSyncProvider>
         </ThemeProvider>

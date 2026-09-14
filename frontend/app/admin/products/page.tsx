@@ -6,6 +6,8 @@ import { formatAriary } from "@/lib/currency";
 import { logActivity } from "@/lib/analytics";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ProductImportModal from "@/components/admin/ProductImportModal";
+import ImageUploader from "@/components/admin/ImageUploader";
+import AttributesEditor from "@/components/admin/AttributesEditor";
 
 interface Category {
   id: string;
@@ -32,6 +34,7 @@ interface Product {
   images?: string[];
   tags?: string[];
   usage_tags?: string[];
+  attributes?: Record<string, unknown>;
   sales_count?: number;
   view_count?: number;
 }
@@ -51,6 +54,7 @@ type FormState = {
   tags: string;
   usage_tags: string;
   is_featured: boolean;
+  attributes: Record<string, string | number | boolean>;
 };
 
 const emptyForm = (): FormState => ({
@@ -68,6 +72,7 @@ const emptyForm = (): FormState => ({
   tags: "",
   usage_tags: "",
   is_featured: false,
+  attributes: {},
 });
 
 function productToForm(p: Product): FormState {
@@ -87,6 +92,8 @@ function productToForm(p: Product): FormState {
     tags: (p.tags || []).join(", "),
     usage_tags: (p.usage_tags || []).join(", "),
     is_featured: !!p.is_featured,
+    attributes:
+      (p.attributes as Record<string, string | number | boolean>) || {},
   };
 }
 
@@ -123,6 +130,7 @@ function formToPayload(f: FormState) {
     tags,
     usage_tags,
     is_featured: f.is_featured,
+    attributes: f.attributes || {},
   };
 }
 
@@ -692,15 +700,27 @@ export default function AdminProductsPage() {
                 />
               </div>
 
+              {/* 📸 Upload d'images */}
               <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Images (URLs, une par ligne)
-                </label>
-                <textarea
-                  className="input-field min-h-[60px] font-mono text-xs"
-                  value={form.images}
-                  onChange={(e) => setField("images", e.target.value)}
-                  placeholder="https://..."
+                <ImageUploader
+                  value={form.images
+                    .split("\n")
+                    .map((s) => s.trim())
+                    .filter(Boolean)}
+                  onChange={(urls) => setField("images", urls.join("\n"))}
+                  max={8}
+                  maxSizeMB={5}
+                  label="Photos du produit"
+                />
+              </div>
+
+              {/* ⚙️ Caractéristiques dynamiques */}
+              <div className="sm:col-span-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <AttributesEditor
+                  key={editing?.id ?? "new"}
+                  value={form.attributes}
+                  onChange={(attrs) => setField("attributes", attrs)}
+                  label="Caractéristiques techniques"
                 />
               </div>
 
@@ -861,6 +881,12 @@ export default function AdminProductsPage() {
           </div>
         </div>
       )}
+
+      <ProductImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={load}
+      />
     </div>
   );
 }

@@ -25,6 +25,10 @@ func SetupRoutes(app *fiber.App, handler *CatalogHandler, jwtSecret string) {
 	admin.Post("/seed", handler.Seed)
 	admin.Post("/products/:id/sales", handler.RecordSale)
 
+	// ✅ Upload d'images produit (admin)
+	admin.Post("/upload", handler.UploadImage)
+	admin.Post("/upload-multiple", handler.UploadMultipleImages)
+
 	admin.Get("/discounts", handler.ListDiscounts)
 	admin.Post("/discounts", handler.CreateDiscount)
 	admin.Patch("/discounts/:id/toggle", handler.ToggleDiscount)

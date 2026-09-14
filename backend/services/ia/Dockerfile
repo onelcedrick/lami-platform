@@ -8,11 +8,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY services/ia/requirements.txt .
 
-# Miroir + timeout + retries
-RUN pip install --no-cache-dir \
-    --index-url https://pypi.org/simple \
+# Miroir Tsinghua (Chine) — beaucoup plus rapide depuis Madagascar
+# + cache pip persistant entre les rebuilds (BuildKit)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir \
+    --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    --trusted-host pypi.tuna.tsinghua.edu.cn \
     --timeout 120 \
-    --retries 10 \
+    --retries 5 \
     -r requirements.txt
 
 COPY services/ia/app ./app

@@ -1,6 +1,9 @@
 FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
+ENV GOPROXY=https://goproxy.io,https://proxy.golang.org,direct
+ENV GOSUMDB=off
+ENV GOTOOLCHAIN=local
 RUN apk add --no-cache git
 
 COPY shared/ /app/shared/

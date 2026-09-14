@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/store";
 import {
   LogoIcon,
   CpuIcon,
@@ -9,6 +10,7 @@ import {
   CartIcon,
   UserIcon,
   StarIcon,
+  LogoutIcon,
 } from "@/components/ui/icons";
 
 const links = [
@@ -26,13 +28,25 @@ const links = [
 
 export default function AdminSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const logout = useAuthStore((s) => s.logout);
+
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
+  };
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
-      <div className="flex h-16 items-center gap-2 border-b border-slate-200 px-5">
+    <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      {/* Header */}
+      <div className="flex h-16 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
         <LogoIcon size={28} />
-        <span className="font-bold text-slate-900">Admin</span>
+        <span className="font-bold text-slate-900 dark:text-slate-100">
+          Admin
+        </span>
       </div>
+
+      {/* Nav */}
       <nav className="flex-1 space-y-1 p-3">
         {links.map((link) => {
           const active = pathname.startsWith(link.href);
@@ -43,8 +57,8 @@ export default function AdminSidebar() {
               href={link.href}
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                 active
-                  ? "bg-primary-50 text-primary-700"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  ? "bg-primary-50 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               }`}
             >
               <Icon size={18} />
@@ -53,13 +67,17 @@ export default function AdminSidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-slate-200 p-3">
-        <Link
-          href="/"
-          className="block rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-50"
+
+      {/* Footer */}
+      <div className="border-t border-slate-200 p-3 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
         >
-          Retour au site
-        </Link>
+          <LogoutIcon size={16} />
+          Déconnexion
+        </button>
       </div>
     </aside>
   );

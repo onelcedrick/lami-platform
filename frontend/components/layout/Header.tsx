@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useAuthStore, useCartStore, useFavoritesStore } from "@/lib/store";
@@ -23,8 +23,12 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [products, setProducts] = useState<SearchableProduct[]>([]);
-  // Evite hydration mismatch: localStorage (panier/favoris) n'existe que cote client
+
+  // Évite hydration mismatch : localStorage (panier/favoris) n'existe que côté client
   const [mounted, setMounted] = useState(false);
+
+  // Masque les éléments boutique pour les rôles admin / technicien
+  const isShopUser = !user || user.role === "client";
 
   useEffect(() => {
     setMounted(true);
@@ -95,7 +99,8 @@ export default function Header() {
         <div className="flex items-center gap-1 sm:gap-2">
           <ThemeToggle />
 
-          {showFavBadge && (
+          {/* Favoris — visible uniquement pour les clients */}
+          {isShopUser && showFavBadge && (
             <Link
               href="/favorites"
               className="relative rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 hover:text-red-500 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -108,17 +113,20 @@ export default function Header() {
             </Link>
           )}
 
-          <Link
-            href="/cart"
-            className="relative rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 hover:text-primary-600 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            <CartIcon size={22} />
-            {showCartBadge && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-[10px] font-bold text-white">
-                {cartCount}
-              </span>
-            )}
-          </Link>
+          {/* Panier — visible uniquement pour les clients */}
+          {isShopUser && (
+            <Link
+              href="/cart"
+              className="relative rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 hover:text-primary-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <CartIcon size={22} />
+              {showCartBadge && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-[10px] font-bold text-white">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+          )}
 
           {isAuthenticated() ? (
             <div className="relative">
@@ -155,9 +163,9 @@ export default function Header() {
                   >
                     Mes tickets
                   </Link>
-                  {(user?.role === "technician" ||
-                    user?.role === "admin" ||
-                    user?.role === "super_admin") && (
+
+                  {/* Espace technicien — uniquement pour le rôle technician */}
+                  {user?.role === "technician" && (
                     <Link
                       href="/technician/dashboard"
                       className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -166,6 +174,8 @@ export default function Header() {
                       Espace technicien
                     </Link>
                   )}
+
+                  {/* Administration — uniquement pour admin / super_admin */}
                   {(user?.role === "admin" || user?.role === "super_admin") && (
                     <Link
                       href="/admin/dashboard"
@@ -175,6 +185,7 @@ export default function Header() {
                       Administration
                     </Link>
                   )}
+
                   <hr className="my-1 border-slate-100 dark:border-slate-700" />
                   <button
                     type="button"

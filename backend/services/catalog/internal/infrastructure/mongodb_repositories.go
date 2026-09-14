@@ -50,6 +50,20 @@ func (r *MongoProductRepository) FindBySlug(ctx context.Context, slug string) (*
 	return &p, nil
 }
 
+// FindBySKU retourne le produit correspondant au SKU (identifiant métier unique).
+// Retourne (nil, nil) si aucun produit n'est trouvé — utile pour le seed.
+func (r *MongoProductRepository) FindBySKU(ctx context.Context, sku string) (*shareddomain.Product, error) {
+	var p shareddomain.Product
+	err := r.collection.FindOne(ctx, bson.M{"sku": sku}).Decode(&p)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil // pas trouvé = pas d'erreur
+		}
+		return nil, err
+	}
+	return &p, nil
+}
+
 func (r *MongoProductRepository) Update(ctx context.Context, product *shareddomain.Product) error {
 	product.UpdatedAt = time.Now().UTC()
 	_, err := r.collection.ReplaceOne(ctx, bson.M{"_id": product.ID}, product)
@@ -95,7 +109,6 @@ func (r *MongoProductRepository) List(ctx context.Context, filter shareddomain.P
 		query["price"] = priceQ
 	}
 	if filter.Search != "" {
-		// Recherche intelligente multi-champs (nom, marque, SKU, tags, usage...)
 		query["$or"] = []bson.M{
 			{"name": bson.M{"$regex": filter.Search, "$options": "i"}},
 			{"slug": bson.M{"$regex": filter.Search, "$options": "i"}},
@@ -110,7 +123,9 @@ func (r *MongoProductRepository) List(ctx context.Context, filter shareddomain.P
 	if len(filter.UsageTags) > 0 {
 		query["usage_tags"] = bson.M{"$in": filter.UsageTags}
 	}
-
+if filter.InStock !=nil && *filter.InStock {
+		query["stock"] = bson.M{"$gt": 0}
+	}
 	total, err := r.collection.CountDocuments(ctx, query)
 	if err != nil {
 		return nil, 0, err
@@ -128,7 +143,6 @@ func (r *MongoProductRepository) List(ctx context.Context, filter shareddomain.P
 	if filter.SortOrder == "asc" {
 		sortOrder = 1
 	}
-	// Alias popularité
 	if sortField == "popularity" || sortField == "popularity_score" {
 		opts.SetSort(bson.D{
 			{Key: "popularity_score", Value: -1},
@@ -159,7 +173,6 @@ func (r *MongoProductRepository) List(ctx context.Context, filter shareddomain.P
 func (r *MongoProductRepository) FindByCategory(ctx context.Context, categoryID string, page, limit int) ([]shareddomain.Product, int64, error) {
 	return r.List(ctx, shareddomain.ProductFilter{CategoryID: categoryID, Page: page, Limit: limit})
 }
-
 
 func (r *MongoProductRepository) IncrementViews(ctx context.Context, id string) error {
 	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{
@@ -219,9 +232,8 @@ func (r *MongoProductRepository) ListByPopularity(ctx context.Context, limit int
 	if limit > 50 {
 		limit = 50
 	}
-	// Tri multi-critères côté Mongo (approximation), score final recalculé en service
 	opts := options.Find().
-		SetLimit(int64(limit * 3)). // marge pour re-rank
+		SetLimit(int64(limit * 3)).
 		SetSort(bson.D{
 			{Key: "sales_count", Value: -1},
 			{Key: "rating", Value: -1},
@@ -242,6 +254,10 @@ func (r *MongoProductRepository) ListByPopularity(ctx context.Context, limit int
 	}
 	return products, nil
 }
+
+// ---------------------------------------------------------------------------
+// Catégories
+// ---------------------------------------------------------------------------
 
 type MongoCategoryRepository struct {
 	collection *mongo.Collection
@@ -312,6 +328,9 @@ func (r *MongoCategoryRepository) ListTree(ctx context.Context) ([]shareddomain.
 	return r.List(ctx)
 }
 
+// ---------------------------------------------------------------------------
+// Promotions / Remises
+// ---------------------------------------------------------------------------
 
 type MongoDiscountRepository struct {
 	collection *mongo.Collection
