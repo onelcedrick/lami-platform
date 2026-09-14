@@ -34,19 +34,19 @@ export const useAuthStore = create<AuthState>()(
         set({ user, accessToken, refreshToken });
       },
       logout: () => {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-  }
-  set({ user: null, accessToken: null, refreshToken: null });
-  // Panier / favoris lies au compte : ne pas les laisser pour un autre user
-  try {
-    useCartStore.getState().clear();
-    useFavoritesStore.getState().clear();
-  } catch {
-    /* ignore */
-  }
-},
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("refresh_token");
+        }
+        set({ user: null, accessToken: null, refreshToken: null });
+        // Panier / favoris sont lies au compte : ne pas les laisser pour le suivant
+        try {
+          useCartStore.getState().clear();
+          useFavoritesStore.getState().clear();
+        } catch {
+          /* stores may not be ready */
+        }
+      },
       isAuthenticated: () => !!get().accessToken,
       isAdmin: () => {
         const role = get().user?.role;
@@ -104,7 +104,7 @@ export const useCartStore = create<CartState>()(
       clear: () => set({ items: [] }),
       total: () =>
         get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
-      count: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
+      count: () => get().items.length, // nombre de produits distincts (pas quantites)
     }),
     { name: "lami-cart" }
   )

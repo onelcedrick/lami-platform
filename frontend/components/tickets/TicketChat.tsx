@@ -4,6 +4,27 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/**
+ * Résout une URL de fichier :
+ * - URLs MinIO internes → réécrites vers l'API Gateway
+ * - URLs absolues → retournées telles quelles
+ * - Chemins relatifs → préfixés par l'API_BASE
+ */
+function fileUrl(rawUrl: string): string {
+  if (!rawUrl) return "";
+  if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+    if (rawUrl.includes("minio:") || rawUrl.includes(":9000/")) {
+      const name = rawUrl.split("/").pop() || "";
+      return `${API_BASE}/api/v1/tickets/files/${name}`;
+    }
+    return rawUrl;
+  }
+  if (rawUrl.startsWith("/api/")) return `${API_BASE}${rawUrl}`;
+  return `${API_BASE}/api/v1/tickets/files/${rawUrl.replace(/^\//, "")}`;
+}
+
 export interface ChatAttachment {
   id: string;
   name: string;
@@ -26,14 +47,10 @@ export interface ChatMessage {
 interface TicketChatProps {
   ticketId: string;
   messages: ChatMessage[];
-  /** Notes internes visibles tech seulement */
   allowInternal?: boolean;
   onMessagesUpdated: (messages: ChatMessage[]) => void;
-  /** API base pour les fichiers */
   apiBase?: string;
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function isImage(mime: string) {
   return mime?.startsWith("image/");
@@ -68,20 +85,18 @@ export default function TicketChat({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visible.length]);
 
-  // SSE temps reel + fallback polling
+  // Polling + SSE pour messages en temps réel
   useEffect(() => {
     if (!ticketId) return;
-    let closed = false;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
     const tok =
       typeof window !== "undefined"
         ? localStorage.getItem("access_token") ||
-          (JSON.parse(localStorage.getItem("lami-auth") || "{}")?.state?.accessToken ?? null)
+          (JSON.parse(localStorage.getItem("lami-auth") || "{}")?.state
+            ?.accessToken ?? null)
         : null;
 
-    // EventSource ne supporte pas Authorization header → use fetch stream or poll with token
-    // Fallback robuste: polling 2s (meilleur que 5s)
     const poll = async () => {
       try {
         const res = await api.getTicket(ticketId);
@@ -96,10 +111,11 @@ export default function TicketChat({
     poll();
     pollTimer = setInterval(poll, 2000);
 
-    // Tentative SSE avec token query (si gateway le relit)
     let es: EventSource | null = null;
     try {
-      const url = `${API_BASE_URL}/api/v1/tickets/${ticketId}/stream?access_token=${encodeURIComponent(tok || "")}`;
+      const url = `${API_BASE}/api/v1/tickets/${ticketId}/stream?access_token=${encodeURIComponent(
+        tok || ""
+      )}`;
       es = new EventSource(url);
       es.addEventListener("messages", (ev) => {
         try {
@@ -110,14 +126,13 @@ export default function TicketChat({
         }
       });
       es.onerror = () => {
-        // garde le polling
+        /* garde le polling */
       };
     } catch {
       /* SSE non dispo */
     }
 
     return () => {
-      closed = true;
       if (pollTimer) clearInterval(pollTimer);
       es?.close();
     };
@@ -133,7 +148,7 @@ export default function TicketChat({
     });
     const json = await res.json();
     if (json.success && json.data) return json.data as ChatAttachment;
-    throw new Error(json.error || "Upload echoue");
+    throw new Error(json.error || "Upload échoué");
   };
 
   const handleSend = async () => {
@@ -141,7 +156,7 @@ export default function TicketChat({
     setSending(true);
     setError("");
     try {
-      let attachments: ChatAttachment[] = [];
+      const attachments: ChatAttachment[] = [];
       if (files.length > 0) {
         setUploading(true);
         for (const f of files) {
@@ -184,21 +199,19 @@ export default function TicketChat({
     return "Client";
   };
 
-  const fileUrl = (url: string) => {
-    if (url.startsWith("http")) return url;
-    return `${API_BASE}${url}`;
-  };
-
   return (
     <div className="flex h-full min-h-[320px] flex-col rounded-xl border border-slate-200 dark:border-slate-700">
       <div className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800">
         Conversation
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4" style={{ maxHeight: 360 }}>
+      <div
+        className="flex-1 space-y-3 overflow-y-auto p-4"
+        style={{ maxHeight: 360 }}
+      >
         {visible.length === 0 ? (
           <p className="text-center text-sm text-slate-400">
-            Aucun message — demarrez la discussion
+            Aucun message — démarrez la discussion
           </p>
         ) : (
           visible.map((m) => {
@@ -278,9 +291,7 @@ export default function TicketChat({
         <div ref={bottomRef} />
       </div>
 
-      {error && (
-        <p className="px-4 text-xs text-red-600">{error}</p>
-      )}
+      {error && <p className="px-4 text-xs text-red-600">{error}</p>}
 
       {files.length > 0 && (
         <div className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-2 dark:border-slate-800">
@@ -339,7 +350,7 @@ export default function TicketChat({
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={2}
-            placeholder="Ecrire un message..."
+            placeholder="Écrire un message..."
             className="input-field flex-1 resize-none text-sm"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -350,7 +361,9 @@ export default function TicketChat({
           />
           <button
             type="button"
-            disabled={sending || uploading || (!text.trim() && files.length === 0)}
+            disabled={
+              sending || uploading || (!text.trim() && files.length === 0)
+            }
             onClick={handleSend}
             className="btn-primary self-end text-sm disabled:opacity-50"
           >

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { HeartIcon } from "@/components/ui/icons";
 import { useFavoritesStore, useAuthStore, type FavoriteItem } from "@/lib/store";
 import { pushFavoritesToServer } from "@/lib/sync-account";
@@ -14,24 +15,29 @@ interface FavoriteButtonProps {
     images?: string[];
     stock?: number;
   };
-  className?: string;
-  size?: number;
-  /** Si true, position absolute coin (carte produit) */
   floating?: boolean;
+  size?: number;
+  className?: string;
 }
 
 export default function FavoriteButton({
   product,
-  className = "",
-  size = 20,
   floating = false,
+  size = 18,
+  className = "",
 }: FavoriteButtonProps) {
+  const router = useRouter();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isFavorite = useFavoritesStore((s) => s.isFavorite(product.id));
   const toggle = useFavoritesStore((s) => s.toggle);
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!isAuthenticated()) {
+      router.push("/login");
+      return;
+    }
     const item: FavoriteItem = {
       productId: product.id,
       name: product.name,
@@ -42,32 +48,34 @@ export default function FavoriteButton({
       stock: product.stock,
     };
     toggle(item);
-    if (useAuthStore.getState().isAuthenticated()) {
-      setTimeout(() => void pushFavoritesToServer(), 100);
-    }
+    setTimeout(() => void pushFavoritesToServer(), 100);
   };
 
-  const base =
-    floating
-      ? "absolute right-2 bottom-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:scale-105 dark:bg-slate-900/90"
-      : "inline-flex items-center justify-center rounded-full p-2 transition hover:bg-slate-100 dark:hover:bg-slate-800";
+  // Coeur rempli UNIQUEMENT si connecte ET favori de CE compte
+  const filled = isAuthenticated() && isFavorite;
 
   return (
     <button
       type="button"
       onClick={handleClick}
-      className={`${base} ${className}`}
-      aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
-      title={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+      aria-label={filled ? "Retirer des favoris" : "Ajouter aux favoris"}
+      title={
+        isAuthenticated()
+          ? filled
+            ? "Retirer des favoris"
+            : "Ajouter aux favoris"
+          : "Connectez-vous pour ajouter aux favoris"
+      }
+      className={
+        floating
+          ? `absolute bottom-2 right-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-md transition hover:scale-105 dark:bg-slate-900 ${className}`
+          : className
+      }
     >
       <HeartIcon
         size={size}
-        filled={isFavorite}
-        className={
-          isFavorite
-            ? "text-red-500 transition"
-            : "text-slate-400 transition hover:text-red-400"
-        }
+        filled={filled}
+        className={filled ? "text-red-500" : "text-slate-400"}
       />
     </button>
   );

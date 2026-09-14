@@ -4,7 +4,7 @@ import { memo } from "react";
 import Link from "next/link";
 import { StarIcon, CartIcon } from "@/components/ui/icons";
 import LazyImage from "@/components/ui/LazyImage";
-import { formatAriary } from "@/lib/currency";
+import { formatAriary, toAriary } from "@/lib/currency";
 import { useCartStore } from "@/lib/store";
 import ShareProductButton from "@/components/catalog/ShareProductButton";
 import FavoriteButton from "@/components/catalog/FavoriteButton";
@@ -44,19 +44,31 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
   const addItem = useCartStore((s) => s.addItem);
   const href = productHref(p);
 
+  // ----- Calculs effectués UNE SEULE FOIS (accessibles dans tout le composant) -----
+  const baseAr = toAriary(p.price);
+  const promo = bestDiscountForProduct(discounts, {
+    id: p.id,
+    category_id: p.category_id,
+    price: p.price,
+  });
+  const finalPriceAr = promo ? applyDiscount(baseAr, promo) : baseAr;
+  const hasPromo = !!promo && finalPriceAr < baseAr;
+
+  const compareAr =
+    p.compare_at_price && p.compare_at_price > p.price
+      ? toAriary(p.compare_at_price)
+      : null;
+
+  const showStrikethrough = hasPromo || !!compareAr;
+  const strikethroughPrice = hasPromo ? baseAr : compareAr;
+
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const promo = bestDiscountForProduct(discounts, {
-      id: p.id,
-      category_id: p.category_id,
-      price: p.price,
-    });
-    const finalPrice = applyDiscount(p.price, promo);
     addItem({
       productId: p.id,
       name: p.name,
-      price: finalPrice,
+      price: finalPriceAr, // toujours en Ariary dans le panier
       quantity: 1,
       image: p.images?.[0],
     });
@@ -65,12 +77,11 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
   return (
     <article className="card group flex flex-col overflow-hidden transition hover:shadow-md dark:hover:border-slate-600">
       <div className="relative">
-        <Link href={href} className="relative flex h-40 items-center justify-center bg-slate-50 dark:bg-slate-800/80">
-          <LazyImage
-            src={p.images?.[0]}
-            alt={p.name}
-            fallbackText={p.brand}
-          />
+        <Link
+          href={href}
+          className="relative flex h-40 items-center justify-center bg-slate-50 dark:bg-slate-800/80"
+        >
+          <LazyImage src={p.images?.[0]} alt={p.name} fallbackText={p.brand} />
           {p.is_featured && (
             <span className="absolute left-2 top-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
               Vedette
@@ -103,34 +114,23 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
         )}
 
         <div className="mt-auto pt-3">
-          {(() => {
-            const promo = bestDiscountForProduct(discounts, {
-              id: p.id,
-              category_id: p.category_id,
-              price: p.price,
-            });
-            const finalPrice = applyDiscount(p.price, promo);
-            const hasPromo = promo && finalPrice < p.price;
-            return (
-              <>
-                {hasPromo && (
-                  <span className="mb-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                    -{formatDiscountValue(promo!)} · {promo!.name}
-                  </span>
-                )}
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold text-primary-600 dark:text-primary-400">
-                    {formatAriary(finalPrice)}
-                  </span>
-                  {(hasPromo || (p.compare_at_price && p.compare_at_price > p.price)) && (
-                    <span className="text-xs text-slate-400 line-through">
-                      {formatAriary(hasPromo ? p.price : (p.compare_at_price as number))}
-                    </span>
-                  )}
-                </div>
-              </>
-            );
-          })()}
+          {hasPromo && promo && (
+            <span className="mb-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300">
+              -{formatDiscountValue(promo)} · {promo.name}
+            </span>
+          )}
+
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg font-bold text-primary-600 dark:text-primary-400">
+              {formatAriary(finalPriceAr)}
+            </span>
+            {showStrikethrough && strikethroughPrice !== null && (
+              <span className="text-xs text-slate-400 line-through">
+                {formatAriary(strikethroughPrice)}
+              </span>
+            )}
+          </div>
+
           <p
             className={`mt-1 text-xs ${
               p.stock > 0
@@ -140,12 +140,13 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
           >
             {p.stock > 0 ? `En stock (${p.stock})` : "Rupture de stock"}
           </p>
+
           <div className="mt-3 flex gap-2">
             <button
               type="button"
               onClick={handleAdd}
               disabled={p.stock <= 0}
-              className="btn-primary flex-1 text-sm"
+              className="btn-primary flex-1 text-sm disabled:opacity-50"
             >
               <CartIcon size={16} />
               Ajouter

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import {
   Ticket,
@@ -13,38 +13,49 @@ import { useAuthStore } from "@/lib/store";
 
 export default function TechnicianTicketsPage() {
   const user = useAuthStore((s) => s.user);
+  const [mounted, setMounted] = useState(false);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Ticket | null>(null);
-  const [reply, setReply] = useState("");
   const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
 
-  const load = async () => {
+  // Évite les erreurs d'hydratation : n'affiche l'UI qu'après le montage client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [assigned, open] = await Promise.all([
+      const [assigned, open, all] = await Promise.all([
         api.assignedTickets({ limit: 50 }),
         api.openTickets({ limit: 50 }),
+        api.listTickets({ limit: 50 }).catch(() => ({ success: false })),
       ]);
-      const a = assigned.success && assigned.data ? (assigned.data as Ticket[]) : [];
-      const o = open.success && open.data
-        ? ((open.data as any).items as Ticket[]) || (open.data as Ticket[])
-        : [];
-      // Merge: open non-assigned first, then assigned
+
+      const extract = (res: any): Ticket[] => {
+        if (!res || !res.success || !res.data) return [];
+        const data = res.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data.items)) return data.items;
+        return [];
+      };
+
       const map = new Map<string, Ticket>();
-      [...o, ...a].forEach((t) => map.set(t.id, t));
+      [...extract(all), ...extract(open), ...extract(assigned)].forEach((tk) => {
+        if (tk && tk.id) map.set(tk.id, tk);
+      });
       setTickets(Array.from(map.values()));
     } catch {
       // silent
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const handleStatus = async (status: string) => {
     if (!selected) return;
@@ -52,32 +63,10 @@ export default function TechnicianTicketsPage() {
     const res = await api.updateTicketStatus(selected.id, { status });
     if (res.success && res.data) {
       setSelected(res.data as Ticket);
-      setMessage("Statut mis a jour");
+      setMessage("Statut mis à jour");
       load();
     } else {
       setMessage(res.error || "Erreur");
-    }
-  };
-
-  const handleReply = async () => {
-    if (!selected || !reply.trim()) return;
-    setSending(true);
-    setMessage("");
-    try {
-      const res = await api.addTicketMessage(selected.id, {
-        content: reply.trim(),
-        is_internal: false,
-      });
-      if (res.success && res.data) {
-        setSelected(res.data as Ticket);
-        setReply("");
-        setMessage("Message envoye");
-        load();
-      } else {
-        setMessage(res.error || "Erreur");
-      }
-    } finally {
-      setSending(false);
     }
   };
 
@@ -85,15 +74,26 @@ export default function TechnicianTicketsPage() {
     if (!user?.id) return;
     const res = await api.assignTicket(ticketId, user.id);
     if (res.success) {
-      setMessage("Ticket assigne");
+      setMessage("Ticket assigné");
       load();
     }
   };
 
+  // Attente du montage côté client (évite le hydration mismatch)
+  if (!mounted) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Mes tickets</h1>
+        <p className="mt-1 text-slate-600">Tickets qui vous sont assignés</p>
+        <p className="mt-6 text-sm text-slate-400">Chargement...</p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-slate-900">Mes tickets</h1>
-      <p className="mt-1 text-slate-600">Tickets qui vous sont assignes</p>
+      <p className="mt-1 text-slate-600">Tickets qui vous sont assignés</p>
 
       {message && (
         <div className="mt-4 rounded-lg bg-primary-50 px-4 py-2 text-sm text-primary-800">
@@ -107,7 +107,7 @@ export default function TechnicianTicketsPage() {
             {loading ? (
               <p className="p-5 text-sm text-slate-400">Chargement...</p>
             ) : tickets.length === 0 ? (
-              <p className="p-5 text-sm text-slate-400">Aucun ticket assigne</p>
+              <p className="p-5 text-sm text-slate-400">Aucun ticket assigné</p>
             ) : (
               tickets.map((t) => (
                 <button
@@ -166,6 +166,12 @@ export default function TechnicianTicketsPage() {
                     {TICKET_STATUS_LABELS[s]}
                   </button>
                 ))}
+                <button
+                  onClick={() => handleAssignSelf(selected.id)}
+                  className="btn-primary text-xs"
+                >
+                  S&apos;assigner
+                </button>
               </div>
 
               <TicketChat
@@ -179,7 +185,7 @@ export default function TechnicianTicketsPage() {
             </div>
           ) : (
             <p className="text-sm text-slate-400">
-              Selectionnez un ticket pour le traiter
+              Sélectionnez un ticket pour le traiter
             </p>
           )}
         </div>

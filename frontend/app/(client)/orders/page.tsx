@@ -39,6 +39,17 @@ function shortDate(iso: string): string {
   });
 }
 
+function canPay(o: Order): boolean {
+  if (o.payment_status === "paid") return false;
+  if (o.status === "cancelled" || o.status === "delivered" || o.status === "refunded") return false;
+  return true;
+}
+
+function canCancel(o: Order): boolean {
+  if (o.payment_status === "paid") return false;
+  return o.status === "pending" || o.status === "confirmed";
+}
+
 export default function ClientOrdersPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
@@ -91,7 +102,7 @@ export default function ClientOrdersPage() {
       setMessage(
         method === "store"
           ? "Commande confirmee — paiement en boutique"
-          : "Paiement Mobile Money initie — validez sur votre telephone"
+          : "Paiement Mobile Money valide — commande payee"
       );
       setPayTarget(null);
       await load();
@@ -100,12 +111,7 @@ export default function ClientOrdersPage() {
     }
   };
 
-  const canPay = (o: Order) =>
-    o.status !== "cancelled" && o.payment_status !== "paid";
-
-  const canCancel = (o: Order) =>
-    (o.status === "pending" || o.status === "confirmed") &&
-    o.payment_status !== "paid";
+  // canPay / canCancel = fonctions module (ci-dessus)
 
   return (
     <div className="mx-auto max-w-lg px-4 py-6 sm:max-w-2xl sm:py-8">

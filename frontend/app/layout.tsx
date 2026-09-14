@@ -5,10 +5,15 @@ import Footer from "@/components/layout/Footer";
 import ChatWidget from "@/components/chat/ChatWidget";
 import JsonLd from "@/components/seo/JsonLd";
 import ThemeProvider from "@/components/providers/ThemeProvider";
+import AccountSyncProvider from "@/components/providers/AccountSyncProvider";
+import StoreHydrator from "@/components/providers/StoreHydrator";
 import ScrollToTop from "@/components/ui/ScrollToTop";
 import VisitorTracker from "@/components/analytics/VisitorTracker";
 import { SEO_DEFAULTS } from "@/lib/geo";
-import AccountSyncProvider from "@/components/providers/AccountSyncProvider";
+
+// ---------------------------------------------------------------------------
+// Metadata
+// ---------------------------------------------------------------------------
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://lami.mg"),
@@ -57,6 +62,30 @@ export const metadata: Metadata = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Script inline : applique le thème avant le premier rendu
+// (évite le flash de thème clair au chargement)
+// ---------------------------------------------------------------------------
+
+const themeInitScript = `
+(function () {
+  try {
+    var stored = localStorage.getItem('lami-theme');
+    if (!stored) return;
+    var theme = JSON.parse(stored).state && JSON.parse(stored).state.theme;
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+  } catch (e) {
+    /* silent */
+  }
+})();
+`;
+
+// ---------------------------------------------------------------------------
+// Layout racine
+// ---------------------------------------------------------------------------
+
 export default function RootLayout({
   children,
 }: {
@@ -69,24 +98,23 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=JSON.parse(localStorage.getItem('lami-theme')||'{}').state?.theme;if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();`,
-          }}
-        />
-      </head><body className="flex min-h-screen flex-col antialiased">
-  <ThemeProvider>
-    <AccountSyncProvider>
-      <JsonLd />
-      <Header />
-      <main className="flex-1">{children}</main>
-      <Footer />
-      <ChatWidget />
-      <ScrollToTop />
-      <VisitorTracker />
-    </AccountSyncProvider>
-  </ThemeProvider>
-</body>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="flex min-h-screen flex-col antialiased">
+        <ThemeProvider>
+          <AccountSyncProvider>
+            <StoreHydrator>
+              <JsonLd />
+              <Header />
+              <main className="flex-1">{children}</main>
+              <Footer />
+              <ChatWidget />
+              <ScrollToTop />
+              <VisitorTracker />
+            </StoreHydrator>
+          </AccountSyncProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
