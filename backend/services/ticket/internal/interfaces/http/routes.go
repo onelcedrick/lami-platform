@@ -1,0 +1,31 @@
+package http
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/lami-platform/shared/pkg/middleware"
+)
+
+func SetupRoutes(app *fiber.App, handler *TicketHandler, jwtSecret string) {
+	api := app.Group("/api/v1/tickets")
+	// Fichiers (lecture) — auth non obligatoire pour affichage image
+	api.Get("/files/:filename", handler.ServeFile)
+
+	api.Get("/health", handler.Health)
+
+	protected := api.Group("", middleware.AuthRequired(jwtSecret))
+	protected.Post("/", handler.CreateTicket)
+	protected.Get("/me", handler.GetMyTickets)
+	protected.Get("/:id", handler.GetTicket)
+	protected.Patch("/:id/status", handler.UpdateStatus)
+	protected.Post("/upload", handler.UploadFile)
+	protected.Post("/:id/messages", handler.AddMessage)
+	protected.Get("/:id/stream", handler.StreamMessages)
+
+	tech := api.Group("", middleware.AuthRequired(jwtSecret), middleware.RoleRequired("technician", "admin", "super_admin"))
+	tech.Get("/assigned", handler.GetAssignedTickets)
+	tech.Get("/open", handler.ListOpenTickets)
+	tech.Post("/:id/assign", handler.AssignTicket)
+
+	admin := api.Group("", middleware.AuthRequired(jwtSecret), middleware.RoleRequired("admin", "super_admin"))
+	admin.Get("/", handler.ListTickets)
+}

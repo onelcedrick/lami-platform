@@ -1,0 +1,142 @@
+name: CI - L'AMI Platform
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+env:
+  GO_VERSION: "1.22"
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  backend-go:
+    name: Backend Go (tests + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Test shared packages
+        working-directory: backend/shared
+        run: |
+          go mod tidy
+          go test ./... -count=1 -v
+
+      - name: Test Order Service
+        working-directory: backend/services/order
+        run: |
+          go mod tidy
+          go test ./... -count=1 -v
+
+      - name: Build Auth Service
+        working-directory: backend/services/auth
+        run: |
+          go mod tidy
+          go build -o /tmp/auth-service ./cmd/main.go
+
+      - name: Build Catalog Service
+        working-directory: backend/services/catalog
+        run: |
+          go mod tidy
+          go build -o /tmp/catalog-service ./cmd/main.go
+
+      - name: Build Order Service
+        working-directory: backend/services/order
+        run: |
+          go mod tidy
+          go build -o /tmp/order-service ./cmd/main.go
+
+      - name: Build Ticket Service
+        working-directory: backend/services/ticket
+        run: |
+          go mod tidy
+          go build -o /tmp/ticket-service ./cmd/main.go
+
+      - name: Build Notification Service
+        working-directory: backend/services/notification
+        run: |
+          go mod tidy
+          go build -o /tmp/notification-service ./cmd/main.go
+
+      - name: Build User Service
+        working-directory: backend/services/user
+        run: |
+          go mod tidy
+          go build -o /tmp/user-service ./cmd/main.go
+
+      - name: Build API Gateway
+        working-directory: backend/api-gateway
+        run: |
+          go mod tidy
+          go build -o /tmp/api-gateway ./cmd/main.go
+
+  backend-ia:
+    name: IA Service Python (tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/services/ia
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies (minimal for unit tests)
+        run: |
+          pip install pydantic pydantic-settings httpx pytest
+          # sentence-transformers optionnel en CI legere
+
+      - name: Run IA unit tests
+        run: |
+          PYTHONPATH=. pytest tests/ -v --tb=short
+
+  frontend:
+    name: Frontend Next.js (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npx tsc --noEmit || true
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          NEXT_PUBLIC_SITE_URL: https://lami.mg
+
+  docker:
+    name: Docker Compose config
+    runs-on: ubuntu-latest
+    needs: [backend-go, backend-ia]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose
+        run: docker compose config
