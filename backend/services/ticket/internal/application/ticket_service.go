@@ -12,17 +12,41 @@ import (
 	"github.com/lami-platform/services/ticket/internal/domain"
 )
 
-type TicketService struct {
-	ticketRepo domain.TicketRepository
+// ---------------------------------------------------------------------------
+// UserDirectory — accès à la liste des techniciens (via user-service)
+// ---------------------------------------------------------------------------
+
+type UserDirectory interface {
+	ListTechnicians(ctx context.Context) ([]TechnicianInfo, error)
 }
 
-func NewTicketService(ticketRepo domain.TicketRepository) *TicketService {
-	return &TicketService{ticketRepo: ticketRepo}
+type TechnicianInfo struct {
+	ID        string `json:"id"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Email     string `json:"email"`
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+type TicketService struct {
+	ticketRepo domain.TicketRepository
+	users      UserDirectory // peut être nil → pas d'auto-assignation
+}
+
+func NewTicketService(ticketRepo domain.TicketRepository, users UserDirectory) *TicketService {
+	return &TicketService{ticketRepo: ticketRepo, users: users}
 }
 
 func generateTicketNumber() string {
 	return fmt.Sprintf("TKT-%s-%s", time.Now().Format("20060102"), uuid.New().String()[:8])
 }
+
+// ---------------------------------------------------------------------------
+// Création + auto-assignation
+// ---------------------------------------------------------------------------
 
 func (s *TicketService) CreateTicket(ctx context.Context, userID string, req shareddomain.CreateTicketRequest) (*shareddomain.Ticket, error) {
 	priority := req.Priority
@@ -53,11 +77,67 @@ func (s *TicketService) CreateTicket(ctx context.Context, userID string, req sha
 		ticket.Attachments = []string{}
 	}
 
+	// Auto-assignation au technicien le moins chargé (best-effort)
+	if err := s.autoAssign(ctx, ticket); err != nil {
+		// On ne bloque pas la création en cas d'échec de l'assignation.
+		fmt.Printf("[ticket] auto-assign failed: %v\n", err)
+	}
+
 	if err := s.ticketRepo.Create(ctx, ticket); err != nil {
 		return nil, err
 	}
 	return ticket, nil
 }
+
+// autoAssign assigne le ticket au technicien actif avec le moins de tickets ouverts.
+// Si aucun technicien n'est disponible, le ticket reste "open" non-assigné.
+func (s *TicketService) autoAssign(ctx context.Context, ticket *shareddomain.Ticket) error {
+	if s.users == nil {
+		return errors.New("annuaire utilisateurs indisponible")
+	}
+
+	techs, err := s.users.ListTechnicians(ctx)
+	if err != nil {
+		return fmt.Errorf("liste techniciens: %w", err)
+	}
+	if len(techs) == 0 {
+		return nil // pas de technicien → reste open
+	}
+
+	var bestTech *TechnicianInfo
+	var bestCount int64 = -1
+
+	for i := range techs {
+		count, err := s.ticketRepo.CountOpenByAssignee(ctx, techs[i].ID)
+		if err != nil {
+			continue
+		}
+		if bestCount == -1 || count < bestCount {
+			bestCount = count
+			bestTech = &techs[i]
+		}
+	}
+
+	if bestTech == nil {
+		return errors.New("aucun technicien disponible")
+	}
+
+	now := time.Now().UTC()
+	ticket.AssignedTo = bestTech.ID
+	ticket.AssignedToName = fmt.Sprintf("%s %s", bestTech.FirstName, bestTech.LastName)
+	ticket.AssignedAt = &now
+	ticket.AutoAssigned = true
+	ticket.Status = shareddomain.TicketStatusInProgress
+
+	fmt.Printf("[ticket] auto-assigned %s to %s (%s) — %d open tickets\n",
+		ticket.TicketNumber, bestTech.ID, ticket.AssignedToName, bestCount)
+
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Lecture
+// ---------------------------------------------------------------------------
 
 func (s *TicketService) GetTicket(ctx context.Context, id string) (*shareddomain.Ticket, error) {
 	return s.ticketRepo.FindByID(ctx, id)
@@ -103,6 +183,10 @@ func (s *TicketService) ListTickets(ctx context.Context, page, limit int, status
 	return s.ticketRepo.List(ctx, page, limit, status, priority, category)
 }
 
+// ---------------------------------------------------------------------------
+// Mise à jour
+// ---------------------------------------------------------------------------
+
 func (s *TicketService) UpdateStatus(ctx context.Context, id string, req shareddomain.UpdateTicketStatusRequest, actorID, actorRole string) (*shareddomain.Ticket, error) {
 	ticket, err := s.ticketRepo.FindByID(ctx, id)
 	if err != nil {
@@ -141,16 +225,38 @@ func (s *TicketService) AssignTicket(ctx context.Context, id, technicianID strin
 	if err != nil {
 		return nil, err
 	}
+
+	now := time.Now().UTC()
 	ticket.AssignedTo = technicianID
+	ticket.AssignedAt = &now
+	ticket.AutoAssigned = false // assignation manuelle
+
 	if ticket.Status == shareddomain.TicketStatusOpen {
 		ticket.Status = shareddomain.TicketStatusInProgress
 	}
-	ticket.UpdatedAt = time.Now().UTC()
+
+	// Enrichir le nom du technicien si l'annuaire est disponible
+	if s.users != nil {
+		if techs, err := s.users.ListTechnicians(ctx); err == nil {
+			for _, t := range techs {
+				if t.ID == technicianID {
+					ticket.AssignedToName = fmt.Sprintf("%s %s", t.FirstName, t.LastName)
+					break
+				}
+			}
+		}
+	}
+
+	ticket.UpdatedAt = now
 	if err := s.ticketRepo.Update(ctx, ticket); err != nil {
 		return nil, err
 	}
 	return ticket, nil
 }
+
+// ---------------------------------------------------------------------------
+// Messages et notes
+// ---------------------------------------------------------------------------
 
 func (s *TicketService) AddMessage(ctx context.Context, ticketID, authorID, authorRole, authorName, content string, isInternal bool, attachments []shareddomain.Attachment) (*shareddomain.Ticket, error) {
 	ticket, err := s.ticketRepo.FindByID(ctx, ticketID)
@@ -183,7 +289,8 @@ func (s *TicketService) AddMessage(ctx context.Context, ticketID, authorID, auth
 
 	ticket.Messages = append(ticket.Messages, msg)
 	ticket.UpdatedAt = time.Now().UTC()
-	// Si tech repond, passer en in_progress si open
+
+	// Si un technicien répond, passer le ticket en in_progress s'il est encore open
 	if !isInternal && (authorRole == "technician" || authorRole == "admin" || authorRole == "super_admin") {
 		if ticket.Status == shareddomain.TicketStatusOpen {
 			ticket.Status = shareddomain.TicketStatusInProgress
@@ -213,6 +320,10 @@ func (s *TicketService) AddInternalNote(ctx context.Context, ticketID, authorID,
 	ticket.InternalNotes = append(ticket.InternalNotes, note)
 	return ticket, nil
 }
+
+// ---------------------------------------------------------------------------
+// Contrôle d'accès
+// ---------------------------------------------------------------------------
 
 func (s *TicketService) CanAccess(ticket *shareddomain.Ticket, userID, role string) bool {
 	if role == "admin" || role == "super_admin" {

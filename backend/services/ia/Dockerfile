@@ -1,30 +1,48 @@
+# ============================================================
+# IA Service — L'AMI Platform
+# Build avec pré-téléchargement complet des dépendances
+# ============================================================
 FROM python:3.11-slim
+
+# Dépendances système
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# ------------------------------------------------------------
+# 1. Installer les dépendances Python
+# ------------------------------------------------------------
+COPY services/ia/requirements.txt /app/requirements.txt
 
-COPY services/ia/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r /app/requirements.txt
 
-# Miroir Tsinghua (Chine) — beaucoup plus rapide depuis Madagascar
-# + cache pip persistant entre les rebuilds (BuildKit)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir \
-    --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
-    --extra-index-url https://download.pytorch.org/whl/cpu \
-    --trusted-host pypi.tuna.tsinghua.edu.cn \
-    --timeout 120 \
-    --retries 5 \
-    -r requirements.txt
+# ------------------------------------------------------------
+# 2. Pré-télécharger le modèle d'embeddings
+#    (une fois pour toutes — pas de download au runtime)
+# ------------------------------------------------------------
+ENV HF_HOME=/app/.cache/huggingface
+ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers
+ENV TRANSFORMERS_CACHE=/app/.cache/huggingface/transformers
 
-COPY services/ia/app ./app
+RUN mkdir -p /app/.cache/huggingface /app/.cache/sentence_transformers && \
+    python -c "from sentence_transformers import SentenceTransformer; \
+               SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')" \
+    && echo " Modèle embeddings téléchargé et mis en cache"
 
-ENV PYTHONUNBUFFERED=1
-ENV HTTP_PORT=8090
-ENV LLM_PROVIDER=mock
+# ------------------------------------------------------------
+# 3. Copier le code de l'application
+# ------------------------------------------------------------
+COPY services/ia/app /app/app
 
+# ------------------------------------------------------------
+# 4. Exposition + démarrage
+# ------------------------------------------------------------
 EXPOSE 8090
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8090"]

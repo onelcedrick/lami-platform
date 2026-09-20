@@ -36,20 +36,31 @@ func main() {
 		_ = mongoClient.Disconnect(ctx)
 	}()
 
+	// Repository + annuaire utilisateurs (pour auto-assignation)
 	ticketRepo := infrastructure.NewMongoTicketRepository(mongoClient)
-	ticketService := application.NewTicketService(ticketRepo)
+	userDirectory := infrastructure.NewHTTPUserDirectory()
+
+	// Service ticket avec auto-assignation
+	ticketService := application.NewTicketService(ticketRepo, userDirectory)
+
+	// Stockage fichiers (MinIO ou local)
 	store, err := storage.NewFromEnv()
 	if err != nil {
 		logger.Warn().Err(err).Msg("Stockage fichiers: fallback local ./uploads")
-		store, _ = storage.NewLocalStore(storage.Config{LocalDir: "./uploads", PublicBaseURL: "/api/v1/tickets/files"})
+		store, _ = storage.NewLocalStore(storage.Config{
+			LocalDir:      "./uploads",
+			PublicBaseURL: "/api/v1/tickets/files",
+		})
 	}
+
+	// Handler HTTP
 	handler := httpHandler.NewTicketHandler(ticketService, store)
 
 	app := fiber.New(fiber.Config{
-		BodyLimit: 12 * 1024 * 1024, // 12 Mo (uploads)
 		AppName:      "L'AMI Ticket Service",
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
+		BodyLimit:    12 * 1024 * 1024, // 12 Mo (uploads)
 	})
 
 	app.Use(recover.New())

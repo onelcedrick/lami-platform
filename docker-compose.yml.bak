@@ -102,6 +102,9 @@ services:
       - lami-network
     restart: unless-stopped
 
+  # ============================================================
+  # CATALOG SERVICE
+  # ============================================================
   catalog-service:
     build:
       context: ./backend
@@ -259,13 +262,13 @@ services:
       - ticket-service
       - notification-service
       - analytics-service
-      - ia-service
     networks:
       - lami-network
     restart: unless-stopped
 
   # ============================================================
-  # IA SERVICE — Groq + sentence-transformers (vrai modèle)
+  # IA SERVICE — désormais démarré automatiquement
+  # (profil ia-only retiré)
   # ============================================================
   ia-service:
     build:
@@ -280,20 +283,7 @@ services:
       MONGO_URI: mongodb://mongodb:27017
       MONGO_DB: lami_ia
       JWT_SECRET: lami-super-secret-key-change-in-production-2026
-
-      # ===== LLM — Groq (OpenAI-compatible) =====
-      LLM_PROVIDER: openai_compatible
-      OPENAI_API_KEY: gsk_TON_TOKEN_ICI
-      OPENAI_BASE_URL: https://api.groq.com/openai/v1
-      OPENAI_MODEL: llama-3.3-70b-versatile
-
-      # ===== Embeddings — vrai modèle =====
-      # Modèle pré-téléchargé → pas besoin de timeout
-      # Décommenter UNIQUEMENT si tu veux forcer le hash (démo rapide)
-      # EMBEDDINGS_BACKEND: hash
-      EMBEDDINGS_LOAD_TIMEOUT: "60"
-
-      # ===== Microservices (Function Calling) =====
+      LLM_PROVIDER: mock
       CATALOG_SERVICE_URL: http://catalog-service:8083
       ORDER_SERVICE_URL: http://order-service:8084
       TICKET_SERVICE_URL: http://ticket-service:8085

@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	shareddomain "github.com/lami-platform/shared/domain"
-	"github.com/lami-platform/shared/pkg/pdf"
 	"github.com/lami-platform/shared/pkg/events"
+	"github.com/lami-platform/shared/pkg/pdf"
 	"github.com/lami-platform/services/order/internal/domain"
 )
 
@@ -19,7 +19,7 @@ type EventPublisher interface {
 	Publish(ctx context.Context, routingKey string, payload any) error
 }
 
-// CatalogPricer charge prix officiels + promos actives (source de verite serveur)
+// CatalogPricer charge prix officiels + promos actives (source de vérité serveur)
 type CatalogPricer interface {
 	GetProduct(ctx context.Context, productID string) (*shareddomain.Product, error)
 	ListActiveDiscounts(ctx context.Context) ([]shareddomain.Discount, error)
@@ -54,13 +54,37 @@ func (s *OrderService) publish(ctx context.Context, key string, payload any) {
 		return
 	}
 	if err := s.publisher.Publish(ctx, key, payload); err != nil {
-		// Log only — la commande est deja persistee (outbox pattern ideal en prod)
 		fmt.Printf("[order] publish %s failed: %v\n", key, err)
 	}
 }
 
 func generateOrderNumber() string {
 	return fmt.Sprintf("ORD-%s-%s", time.Now().Format("20060102"), uuid.New().String()[:8])
+}
+
+// generatePaymentReference crée une référence réaliste selon l'opérateur
+// Format: <PREFIX><YYMMDD>.<HEURE>.<RAND5>
+// Ex: MV240123.1432.A7B3F
+func generatePaymentReference(method string) string {
+	prefix := "MP" // Mobile Money générique
+	switch method {
+	case "mvola":
+		prefix = "MV"
+	case "orange_money", "orange":
+		prefix = "OM"
+	case "airtel_money", "airtel":
+		prefix = "AM"
+	case "store":
+		prefix = "BO" // Boutique
+	}
+	now := time.Now()
+	rand := strings.ToUpper(uuid.New().String()[:5])
+	return fmt.Sprintf("%s%s.%s.%s",
+		prefix,
+		now.Format("060102"), // YYMMDD
+		now.Format("1504"),   // HHMM
+		rand,
+	)
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, userID string, req shareddomain.CreateOrderRequest) (*shareddomain.Order, error) {
@@ -82,7 +106,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID string, req share
 			return nil, errors.New("quantite invalide")
 		}
 
-		// SOURCE DE VERITE : prix catalogue serveur (ignore unit_price client)
 		product, err := s.catalog.GetProduct(ctx, itemReq.ProductID)
 		if err != nil {
 			return nil, fmt.Errorf("produit %s: %w", itemReq.ProductID, err)
@@ -257,7 +280,6 @@ func (s *OrderService) UpdateStatus(ctx context.Context, id string, status share
 	}
 	order.UpdatedAt = time.Now().UTC()
 
-	// Evenements metier
 	if status == shareddomain.OrderStatusCancelled {
 		s.publish(ctx, events.RoutingOrderCancelled, events.OrderCancelledEvent{
 			EventID:     uuid.New().String(),
@@ -314,7 +336,6 @@ func (s *OrderService) PayOrder(ctx context.Context, id, userID, method, phone s
 		return nil, errors.New("commande deja payee")
 	}
 
-	// Mobile Money Madagascar : initiation (simulation en attente de confirmation operateur)
 	switch method {
 	case "mvola", "orange_money", "airtel_money", "store", "mobile_money":
 		// ok
@@ -331,19 +352,23 @@ func (s *OrderService) PayOrder(ctx context.Context, id, userID, method, phone s
 		}
 	}
 
-	// Boutique : en attente de paiement physique.
-	// Mobile Money : en simulation on valide automatiquement (paid).
-	// En production: initier API operateur puis ConfirmPayment via webhook.
+	// Boutique : confirmation immédiate sans référence paiement
+	// Mobile Money : simulation validée (en prod → webhook opérateur)
 	if method == "store" {
 		order.PaymentStatus = shareddomain.PaymentStatusPending
 		order.Status = shareddomain.OrderStatusConfirmed
 	} else {
-		// mvola / orange_money / airtel_money / mobile_money — simulation: paye immediatement
+		// mvola / orange_money / airtel_money / mobile_money
+		ref := generatePaymentReference(method)
+		now := time.Now().UTC()
 		order.PaymentStatus = shareddomain.PaymentStatusPaid
 		order.Status = shareddomain.OrderStatusConfirmed
+		order.PaymentReference = ref
+		order.PaidAt = &now
+
 		s.publish(ctx, events.RoutingOrderPaid, events.OrderPaidEvent{
 			EventID:       uuid.New().String(),
-			OccurredAt:    time.Now().UTC(),
+			OccurredAt:    now,
 			OrderID:       order.ID,
 			OrderNumber:   order.OrderNumber,
 			UserID:        order.UserID,
@@ -369,7 +394,6 @@ func (s *OrderService) GetStats(ctx context.Context, days int) (*shareddomain.Or
 func (s *OrderService) ConfirmPayment(ctx context.Context, orderID, providerRef, status string) (*shareddomain.Order, error) {
 	order, err := s.orderRepo.FindByID(ctx, orderID)
 	if err != nil {
-		// fallback order_number
 		order, err = s.orderRepo.FindByOrderNumber(ctx, orderID)
 		if err != nil {
 			return nil, errors.New("commande introuvable")
@@ -387,24 +411,21 @@ func (s *OrderService) ConfirmPayment(ctx context.Context, orderID, providerRef,
 	}
 	// success
 	if providerRef != "" {
-		note := "Ref paiement: " + providerRef
-		if order.Notes == "" {
-			order.Notes = note
-		} else {
-			order.Notes = order.Notes + " | " + note
-		}
+		order.PaymentReference = providerRef
 	}
+	now := time.Now().UTC()
+	order.PaidAt = &now
 	order.PaymentStatus = shareddomain.PaymentStatusPaid
 	if order.Status == shareddomain.OrderStatusPending {
 		order.Status = shareddomain.OrderStatusConfirmed
 	}
-	order.UpdatedAt = time.Now().UTC()
+	order.UpdatedAt = now
 	if err := s.orderRepo.Update(ctx, order); err != nil {
 		return nil, err
 	}
 	s.publish(ctx, events.RoutingOrderPaid, events.OrderPaidEvent{
 		EventID:       uuid.New().String(),
-		OccurredAt:    time.Now().UTC(),
+		OccurredAt:    now,
 		OrderID:       order.ID,
 		OrderNumber:   order.OrderNumber,
 		UserID:        order.UserID,
@@ -442,22 +463,24 @@ func (s *OrderService) GetInvoice(ctx context.Context, orderID string) (map[stri
 		return nil, err
 	}
 	return map[string]interface{}{
-		"invoice_number":  order.InvoiceNumber,
-		"order_number":    order.OrderNumber,
-		"order_id":        order.ID,
-		"user_id":         order.UserID,
-		"items":           order.Items,
-		"sub_total":       order.SubTotal,
-		"shipping_cost":   order.ShippingCost,
-		"discount":        order.Discount,
-		"tax":             order.Tax,
-		"total":           order.Total,
-		"currency":        "MGA",
-		"payment_method":  order.PaymentMethod,
-		"payment_status":  order.PaymentStatus,
-		"shipping_address": order.ShippingAddress,
-		"issued_at":       time.Now().UTC(),
-		"created_at":      order.CreatedAt,
+		"invoice_number":    order.InvoiceNumber,
+		"order_number":      order.OrderNumber,
+		"order_id":          order.ID,
+		"user_id":           order.UserID,
+		"items":             order.Items,
+		"sub_total":         order.SubTotal,
+		"shipping_cost":     order.ShippingCost,
+		"discount":          order.Discount,
+		"tax":               order.Tax,
+		"total":             order.Total,
+		"currency":          "MGA",
+		"payment_method":    order.PaymentMethod,
+		"payment_status":    order.PaymentStatus,
+		"payment_reference": order.PaymentReference,
+		"paid_at":           order.PaidAt,
+		"shipping_address":  order.ShippingAddress,
+		"issued_at":         time.Now().UTC(),
+		"created_at":        order.CreatedAt,
 	}, nil
 }
 

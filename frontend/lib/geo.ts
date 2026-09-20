@@ -11,8 +11,8 @@ export const COMPANY_GEO = {
   address: {
     streetAddress: "Toamasina",
     addressLocality: "Toamasina",
-    addressRegion: "Haute Matsiatra",
-    postalCode: "301",
+    addressRegion: "Atsinanana",
+    postalCode: "501",
     addressCountry: "MG",
   },
   geo: {

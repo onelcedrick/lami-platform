@@ -28,11 +28,14 @@ export interface Order {
   status: string;
   payment_status: string;
   payment_method?: string;
+  payment_reference?: string;
+  paid_at?: string;
   shipping_address: Address;
   notes?: string;
   tracking_number?: string;
   created_at: string;
   updated_at: string;
+  invoice_number?: string;
 }
 
 export interface TicketMessage {
@@ -56,6 +59,9 @@ export interface Ticket {
   ticket_number: string;
   user_id: string;
   assigned_to?: string;
+  assigned_to_name?: string;
+   assigned_at?: string;
+   auto_assigned?: boolean;
   title: string;
   description: string;
   category: string;

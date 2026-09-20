@@ -1,5 +1,7 @@
 from functools import lru_cache
 from typing import List
+import os
+import threading
 
 import numpy as np
 
@@ -7,8 +9,12 @@ from app.core.config import get_settings
 
 
 class EmbeddingService:
-    """Service d'embeddings. Utilise sentence-transformers si disponible,
-    sinon un fallback hash-based pour demarrer sans dependance lourde.
+    """Service d'embeddings avec fallback robuste.
+
+    Priorités :
+    1. Si EMBEDDINGS_BACKEND=hash → force le mode hash (rapide, dev)
+    2. Sinon essaye sentence-transformers avec un timeout
+    3. Si timeout ou erreur → bascule sur hash automatiquement
     """
 
     def __init__(self) -> None:
@@ -18,17 +24,58 @@ class EmbeddingService:
         self._backend = "hash"
 
     def load(self) -> None:
-        try:
-            from sentence_transformers import SentenceTransformer
+        # ---------- Mode forcé par variable d'environnement ----------
+        force = (os.getenv("EMBEDDINGS_BACKEND") or "").lower()
+        if force in ("hash", "hashing", "simple"):
+            self._set_hash()
+            print("[embeddings] backend=hash (force par EMBEDDINGS_BACKEND)", flush=True)
+            return
 
-            self._model = SentenceTransformer(self.settings.embedding_model)
+        # ---------- Tentative sentence-transformers avec TIMEOUT ----------
+        timeout = float(os.getenv("EMBEDDINGS_LOAD_TIMEOUT", "20"))
+
+        def _try_load(store: dict) -> None:
+            try:
+                from sentence_transformers import SentenceTransformer
+
+                store["model"] = SentenceTransformer(self.settings.embedding_model)
+                store["ok"] = True
+            except Exception as e:
+                store["error"] = str(e)
+                store["ok"] = False
+
+        result: dict = {"ok": False}
+        thread = threading.Thread(target=_try_load, args=(result,), daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+
+        if thread.is_alive():
+            print(
+                f"[embeddings] TIMEOUT apres {timeout}s — fallback hash",
+                flush=True,
+            )
+            self._set_hash()
+            return
+
+        if result.get("ok") and result.get("model") is not None:
+            self._model = result["model"]
             self._dim = self._model.get_sentence_embedding_dimension()
             self._backend = "sentence-transformers"
-        except Exception:
-            # Fallback leger (dev / CI sans GPU / sans model download)
-            self._model = None
-            self._backend = "hash"
-            self._dim = 384
+            print(
+                f"[embeddings] backend=sentence-transformers dim={self._dim}",
+                flush=True,
+            )
+        else:
+            print(
+                f"[embeddings] erreur chargement ({result.get('error')}) — fallback hash",
+                flush=True,
+            )
+            self._set_hash()
+
+    def _set_hash(self) -> None:
+        self._model = None
+        self._backend = "hash"
+        self._dim = 384
 
     @property
     def dimension(self) -> int:
@@ -57,7 +104,7 @@ class EmbeddingService:
         return self.embed([text])[0]
 
     def _hash_embed(self, text: str) -> np.ndarray:
-        """Embedding deterministe simple pour mode offline / tests."""
+        """Embedding déterministe simple (offline / fallback)."""
         vec = np.zeros(self._dim, dtype=np.float32)
         tokens = text.lower().split()
         if not tokens:

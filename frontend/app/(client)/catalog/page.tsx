@@ -1,12 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import ProductCard from "@/components/catalog/ProductCard";
 import SmartSearch from "@/components/search/SmartSearch";
 import { filterProducts, SearchableProduct } from "@/lib/search";
 import { formatAriary } from "@/lib/currency";
+import {
+  CpuIcon,
+  ChevronRightIcon,
+  FilterIcon,
+  XIcon,
+} from "@/components/ui/icons";
 
 interface Product extends SearchableProduct {
   id: string;
@@ -22,6 +34,7 @@ interface Product extends SearchableProduct {
   is_featured: boolean;
   usage_tags?: string[];
   tags?: string[];
+  category_id?: string;
 }
 
 interface Category {
@@ -40,33 +53,73 @@ interface Discount {
   is_active: boolean;
 }
 
-function CatalogInner() {
-  const searchParams = useSearchParams();
-  const initialSearch = searchParams.get("search") || "";
-  const initialCategory = searchParams.get("category") || "";
-  const initialUsage = searchParams.get("usage") || "";
+type SortKey =
+  | "relevance"
+  | "popularity"
+  | "price_asc"
+  | "price_desc"
+  | "name";
 
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "relevance", label: "Pertinence" },
+  { value: "popularity", label: "Popularité" },
+  { value: "price_asc", label: "Prix croissant" },
+  { value: "price_desc", label: "Prix décroissant" },
+  { value: "name", label: "Nom (A-Z)" },
+];
+
+const USAGE_TAGS = ["gaming", "bureautique", "creation", "streaming"];
+
+// ---------------------------------------------------------------------------
+// Composant interne
+// ---------------------------------------------------------------------------
+
+function CatalogInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // ----- Params URL (source de vérité) -----
+  const urlSearch = searchParams.get("search") || "";
+  const urlCategory = searchParams.get("category") || "";
+  const urlSort = (searchParams.get("sort") as SortKey) || "relevance";
+  const urlInStock = searchParams.get("in_stock") === "true";
+  const urlUsage = searchParams.get("usage") || "";
+
+  // ----- Données -----
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState(initialSearch);
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [sortBy, setSortBy] = useState<
-    "relevance" | "popularity" | "price_asc" | "price_desc" | "name"
-  >("relevance");
-  const [inStockOnly, setInStockOnly] = useState(false);
 
-  // Charger le catalogue (large set pour recherche locale intelligente)
+  // ----- Filtres locaux (miroir des params URL) -----
+  const [search, setSearch] = useState(urlSearch);
+  const [selectedCategory, setSelectedCategory] = useState(""); // id de catégorie
+  const [sortBy, setSortBy] = useState<SortKey>(urlSort);
+  const [inStockOnly, setInStockOnly] = useState(urlInStock);
+  const [usageFilter, setUsageFilter] = useState(urlUsage);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  // ----- Helpers URL -----
+  const updateURL = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([k, v]) => {
+        if (v === null || v === "") params.delete(k);
+        else params.set(k, v);
+      });
+      const qs = params.toString();
+      router.replace(qs ? `/catalog?${qs}` : "/catalog", { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  // ----- Chargement initial -----
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const params: Record<string, string> = { limit: "100" };
-        if (initialUsage) params.usage = initialUsage;
-
         const [prodRes, catRes, discRes] = await Promise.all([
-          api.listProducts(params),
+          api.listProducts({ limit: "100" }),
           api.listCategories(),
           api.listActiveDiscounts(),
         ]);
@@ -77,11 +130,12 @@ function CatalogInner() {
         if (catRes.success && catRes.data) {
           const cats = catRes.data as Category[];
           setCategories(cats);
-          if (initialCategory) {
+          if (urlCategory) {
             const found = cats.find(
               (c) =>
-                c.name.toLowerCase() === initialCategory.toLowerCase() ||
-                c.slug === initialCategory
+                c.name.toLowerCase() === urlCategory.toLowerCase() ||
+                c.slug === urlCategory ||
+                c.id === urlCategory
             );
             if (found) setSelectedCategory(found.id);
           }
@@ -96,201 +150,458 @@ function CatalogInner() {
       }
     }
     load();
-  }, [initialCategory, initialUsage]);
+  }, [urlCategory]);
 
-  // Sync search from URL
-  useEffect(() => {
-    setSearch(initialSearch);
-  }, [initialSearch]);
+  // ----- Sync URL → state quand l'URL change (back/forward) -----
+  useEffect(() => setSearch(urlSearch), [urlSearch]);
+  useEffect(() => setSortBy(urlSort), [urlSort]);
+  useEffect(() => setInStockOnly(urlInStock), [urlInStock]);
+  useEffect(() => setUsageFilter(urlUsage), [urlUsage]);
 
-  const categoryFiltered = useMemo(() => {
-    let list = allProducts;
-    if (selectedCategory) {
-      list = list.filter((p) => {
-        const anyP = p as Product & { category_id?: string };
-        return !anyP.category_id || anyP.category_id === selectedCategory;
-      });
-    }
-    if (inStockOnly) list = list.filter((p) => p.stock > 0);
-    return list;
-  }, [allProducts, selectedCategory, inStockOnly]);
-
-  // Re-fetch when category changes for accuracy
-  useEffect(() => {
-    if (!selectedCategory) return;
-    let cancelled = false;
-    (async () => {
-      const res = await api.listProducts({
-        limit: "100",
-        category_id: selectedCategory,
-      });
-      if (!cancelled && res.success && res.data) {
-        setAllProducts(res.data as Product[]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedCategory]);
-
+  // ----- Filtrage + tri (client-side) -----
   const products = useMemo(() => {
-    let list = search
-      ? filterProducts(categoryFiltered, search, 48)
-      : categoryFiltered;
+    let list = allProducts;
 
-    if (sortBy === "popularity") {
-      list = [...list].sort((a, b) => {
-        const score = (p: Product) =>
-          ((p as any).sales_count || 0) * 50 +
-          ((p as any).view_count || 0) * 2 +
-          ((p as any).rating || 0) * ((p as any).review_count || 0) * 8 +
-          (p.is_featured ? 100 : 0);
-        return score(b) - score(a);
-      });
+    // Catégorie (bug fix : on n'inclut plus les produits sans catégorie)
+    if (selectedCategory) {
+      list = list.filter((p) => p.category_id === selectedCategory);
     }
-    if (sortBy === "price_asc") list = [...list].sort((a, b) => a.price - b.price);
-    if (sortBy === "price_desc") list = [...list].sort((a, b) => b.price - a.price);
-    if (sortBy === "name") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    return list;
-  }, [categoryFiltered, search, sortBy]);
 
-  const handleSearch = useCallback((q: string) => {
-    setSearch(q);
-  }, []);
+    // Usage tags
+    if (usageFilter) {
+      list = list.filter((p) =>
+        (p.usage_tags || []).some(
+          (u) => u.toLowerCase() === usageFilter.toLowerCase()
+        )
+      );
+    }
+
+    // En stock
+    if (inStockOnly) {
+      list = list.filter((p) => p.stock > 0);
+    }
+
+    // Recherche floue locale
+    if (search) {
+      list = filterProducts(list, search, 48);
+    }
+
+    // Tri
+    const sorted = [...list];
+    switch (sortBy) {
+      case "popularity":
+        sorted.sort((a, b) => {
+          const score = (p: Product) =>
+            ((p as any).sales_count || 0) * 50 +
+            ((p as any).view_count || 0) * 2 +
+            ((p as any).rating || 0) * ((p as any).review_count || 0) * 8 +
+            (p.is_featured ? 100 : 0);
+          return score(b) - score(a);
+        });
+        break;
+      case "price_asc":
+        sorted.sort((a, b) => a.price - b.price);
+        break;
+      case "price_desc":
+        sorted.sort((a, b) => b.price - a.price);
+        break;
+      case "name":
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+    }
+    return sorted;
+  }, [allProducts, selectedCategory, usageFilter, inStockOnly, search, sortBy]);
+
+  // ----- Handlers -----
+  const handleSearchChange = useCallback(
+    (q: string) => {
+      setSearch(q);
+      updateURL({ search: q || null });
+    },
+    [updateURL]
+  );
+
+  const handleCategoryChange = (cat: Category | null) => {
+    setSelectedCategory(cat?.id || "");
+    updateURL({ category: cat ? cat.slug || cat.name : null });
+  };
+
+  const handleSortChange = (value: SortKey) => {
+    setSortBy(value);
+    updateURL({ sort: value === "relevance" ? null : value });
+  };
+
+  const handleInStockToggle = (value: boolean) => {
+    setInStockOnly(value);
+    updateURL({ in_stock: value ? "true" : null });
+  };
+
+  const handleUsageToggle = (tag: string) => {
+    const next = usageFilter === tag ? "" : tag;
+    setUsageFilter(next);
+    updateURL({ usage: next || null });
+  };
+
+  const resetFilters = () => {
+    setSelectedCategory("");
+    setInStockOnly(false);
+    setUsageFilter("");
+    setSearch("");
+    setSortBy("relevance");
+    router.replace("/catalog", { scroll: false });
+  };
+
+  // ----- Catégorie sélectionnée (objet) -----
+  const selectedCategoryObj = categories.find((c) => c.id === selectedCategory);
+
+  // ----- Nombre de filtres actifs (hors recherche et tri) -----
+  const activeFiltersCount =
+    (selectedCategory ? 1 : 0) +
+    (inStockOnly ? 1 : 0) +
+    (usageFilter ? 1 : 0);
+
+  const hasFilters = activeFiltersCount > 0 || !!search;
+
+  // ----- Rendu de la sidebar (partagé desktop + drawer mobile) -----
+  const SidebarContent = (
+    <div className="space-y-4">
+      {/* Catégories */}
+      <div className="card p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Catégories
+        </h2>
+        <ul className="mt-3 space-y-1">
+          <li>
+            <button
+              type="button"
+              onClick={() => handleCategoryChange(null)}
+              className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                !selectedCategory
+                  ? "bg-primary-50 font-medium text-primary-700 dark:bg-primary-500/15 dark:text-primary-300"
+                  : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              Toutes
+            </button>
+          </li>
+          {categories.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onClick={() => handleCategoryChange(c)}
+                className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                  selectedCategory === c.id
+                    ? "bg-primary-50 font-medium text-primary-700 dark:bg-primary-500/15 dark:text-primary-300"
+                    : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                }`}
+              >
+                {c.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Usage */}
+      <div className="card p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Usage
+        </h2>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {USAGE_TAGS.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => handleUsageToggle(tag)}
+              className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition ${
+                usageFilter === tag
+                  ? "bg-primary-600 text-white dark:bg-primary-500"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Disponibilité */}
+      <div className="card p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Disponibilité
+        </h2>
+        <label className="mt-3 flex cursor-pointer items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={inStockOnly}
+            onChange={(e) => handleInStockToggle(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 focus:ring-offset-0 dark:border-slate-600 dark:bg-slate-800"
+          />
+          En stock uniquement
+        </label>
+      </div>
+
+      {/* Réinitialiser */}
+      {hasFilters && (
+        <button
+          type="button"
+          onClick={resetFilters}
+          className="w-full rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+        >
+          Réinitialiser les filtres
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      {/* ===================== HEADER ===================== */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <CpuIcon size={14} />
             Catalogue
+          </div>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
+            Composants PC &amp; Configurations
           </h1>
-          <p className="mt-1 text-slate-600 dark:text-slate-400">
-            Composants PC et configurations completes — prix en Ariary (MGA)
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {loading
+              ? "Chargement..."
+              : `${products.length} produit${products.length > 1 ? "s" : ""}${
+                  selectedCategoryObj ? ` dans ${selectedCategoryObj.name}` : ""
+                }`}
           </p>
         </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {loading ? "..." : `${products.length} produit${products.length > 1 ? "s" : ""}`}
-        </p>
+
+        {/* Bouton filtres (mobile) */}
+        <button
+          type="button"
+          onClick={() => setMobileFiltersOpen(true)}
+          className="inline-flex items-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
+        >
+          <FilterIcon size={16} />
+          Filtres
+          {activeFiltersCount > 0 && (
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-[10px] font-bold text-white">
+              {activeFiltersCount}
+            </span>
+          )}
+        </button>
       </div>
 
-      <div className="flex flex-col gap-8 lg:flex-row">
-        <aside className="w-full shrink-0 space-y-4 lg:w-56">
-          <div className="card p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Categories
-            </h2>
-            <ul className="mt-3 space-y-1">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory("")}
-                  className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
-                    !selectedCategory
-                      ? "bg-primary-50 font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
-                      : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  Toutes
-                </button>
-              </li>
-              {categories.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCategory(c.id)}
-                    className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
-                      selectedCategory === c.id
-                        ? "bg-primary-50 font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
-                        : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="card p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Filtres
-            </h2>
-            <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={inStockOnly}
-                onChange={(e) => setInStockOnly(e.target.checked)}
-                className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-              />
-              En stock uniquement
-            </label>
-            <label className="mt-3 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Trier par
-            </label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              className="input-field mt-1"
-            >
-              <option value="relevance">Pertinence</option>
-              <option value="popularity">Popularite</option>
-              <option value="price_asc">Prix croissant</option>
-              <option value="price_desc">Prix decroissant</option>
-              <option value="name">Nom A-Z</option>
-            </select>
-          </div>
+      {/* ===================== LAYOUT ===================== */}
+      <div className="mt-6 flex gap-8">
+        {/* Sidebar desktop */}
+        <aside className="hidden w-60 shrink-0 lg:block">
+          <div className="sticky top-24">{SidebarContent}</div>
         </aside>
 
-        <div className="flex-1">
-          <div className="mb-6 max-w-xl">
-            <SmartSearch
-              products={allProducts}
-              navigateOnSubmit={false}
-              onSearch={handleSearch}
-              placeholder="Ex: sams, ryzen, rtx, ssd..."
-            />
-            <p className="mt-1.5 text-xs text-slate-400">
-              Astuce : tapez quelques lettres puis Tab pour completer (ex. sams → Samsung)
-            </p>
+        {/* Contenu principal */}
+        <div className="min-w-0 flex-1">
+          {/* Barre recherche + tri */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex-1">
+              <SmartSearch
+                products={allProducts}
+                navigateOnSubmit={false}
+                onSearch={handleSearchChange}
+                placeholder="Rechercher (ryzen, samsung, rtx...)"
+                defaultValue={search}
+              />
+            </div>
+
+            <select
+              value={sortBy}
+              onChange={(e) => handleSortChange(e.target.value as SortKey)}
+              className="input-field w-full sm:w-48"
+              aria-label="Trier par"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {loading ? (
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div
-                  key={i}
-                  className="card h-80 animate-pulse bg-slate-100 dark:bg-slate-800"
+          {/* Chips de filtres actifs */}
+          {hasFilters && !loading && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {selectedCategoryObj && (
+                <FilterChip
+                  label={`Catégorie : ${selectedCategoryObj.name}`}
+                  onRemove={() => handleCategoryChange(null)}
                 />
-              ))}
-            </div>
-          ) : products.length === 0 ? (
-            <div className="card py-16 text-center text-slate-500 dark:text-slate-400">
-              Aucun produit trouve
-              {search && (
-                <p className="mt-2 text-sm">
-                  pour &quot;{search}&quot; — essayez une autre marque ou categorie
-                </p>
               )}
-            </div>
-          ) : (
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {products.map((p) => (
-                <ProductCard key={p.id} product={p} discounts={discounts} />
-              ))}
+              {usageFilter && (
+                <FilterChip
+                  label={`Usage : ${usageFilter}`}
+                  onRemove={() => handleUsageToggle(usageFilter)}
+                />
+              )}
+              {inStockOnly && (
+                <FilterChip
+                  label="En stock"
+                  onRemove={() => handleInStockToggle(false)}
+                />
+              )}
+              {search && (
+                <FilterChip
+                  label={`« ${search} »`}
+                  onRemove={() => handleSearchChange("")}
+                />
+              )}
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="ml-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Tout effacer
+              </button>
             </div>
           )}
 
-          {!loading && products.length > 0 && (
-            <p className="mt-8 text-center text-xs text-slate-400">
-              Prix affiches en Ariary malgache (MGA). Exemple : {formatAriary(100)} pour 100 EUR de reference.
-            </p>
-          )}
+          {/* Grille produits */}
+          <div className="mt-6">
+            {loading ? (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <ProductSkeleton key={i} />
+                ))}
+              </div>
+            ) : products.length === 0 ? (
+              <div className="card py-20 text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                  <CpuIcon
+                    size={28}
+                    className="text-slate-300 dark:text-slate-600"
+                  />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-slate-900 dark:text-slate-100">
+                  Aucun produit trouvé
+                </h3>
+                <p className="mx-auto mt-1 max-w-xs text-sm text-slate-500 dark:text-slate-400">
+                  {search
+                    ? `Aucun résultat pour « ${search} ». Essayez une autre marque ou catégorie.`
+                    : "Essayez d'élargir vos filtres."}
+                </p>
+                {hasFilters && (
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="btn-primary mt-6 inline-flex"
+                  >
+                    Réinitialiser les filtres
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  {products.map((p) => (
+                    <ProductCard
+                      key={p.id}
+                      product={p}
+                      discounts={discounts}
+                    />
+                  ))}
+                </div>
+
+                {/* <p className="mt-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                  Prix affichés en Ariary malgache (MGA). Exemple :{" "}
+                  {formatAriary(100)} pour 100 EUR de référence.
+                </p> */}
+              </>
+            )}
+          </div>
         </div>
+      </div>
+
+      {/* ===================== DRAWER MOBILE ===================== */}
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileFiltersOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                Filtres
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(false)}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                aria-label="Fermer"
+              >
+                <XIcon size={20} />
+              </button>
+            </div>
+
+            {SidebarContent}
+
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen(false)}
+              className="btn-primary mt-6 w-full"
+            >
+              Voir les {products.length} résultat{products.length > 1 ? "s" : ""}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sous-composants
+// ---------------------------------------------------------------------------
+
+function FilterChip({
+  label,
+  onRemove,
+}: {
+  label: string;
+  onRemove: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      className="group inline-flex items-center gap-1.5 rounded-full bg-primary-50 py-1 pl-3 pr-2 text-xs font-medium text-primary-700 transition hover:bg-primary-100 dark:bg-primary-500/15 dark:text-primary-300 dark:hover:bg-primary-500/25"
+    >
+      {label}
+      <XIcon
+        size={12}
+        className="text-primary-600 transition group-hover:text-primary-800 dark:text-primary-400"
+      />
+    </button>
+  );
+}
+
+function ProductSkeleton() {
+  return (
+    <div className="card overflow-hidden">
+      <div className="aspect-[4/3] animate-pulse bg-slate-100 dark:bg-slate-800" />
+      <div className="space-y-3 p-4">
+        <div className="h-2.5 w-16 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+        <div className="h-4 w-3/4 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+        <div className="h-5 w-24 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+        <div className="h-9 w-full animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
       </div>
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
 
 export default function CatalogPage() {
   return (

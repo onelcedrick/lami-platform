@@ -54,3 +54,8 @@ storage/
 logs/
 *.log
 npm-debug.log*
+backend/go-cache/
+backend/bin/
+.env
+services/ia/.env
+.env

@@ -44,7 +44,7 @@ func main() {
 	discountRepo := infrastructure.NewMongoDiscountRepository(mongoClient)
 	catalogService := application.NewCatalogService(productRepo, categoryRepo, discountRepo)
 
-	// ✅ Object store (local ou MinIO selon l'env)
+	// Object store (local ou MinIO selon l'env)
 	store, err := storage.NewFromEnv()
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Impossible d'initialiser l'object store")
@@ -72,7 +72,7 @@ func main() {
 		// Catégories : idempotent par slug (déjà géré dans SeedCategories)
 		_ = catalogService.SeedCategories(context.Background())
 
-		// ✅ Garde-fou : ne seeder les produits que si la base est vide
+		//  Garde-fou : ne seeder les produits que si la base est vide
 		_, total, err := catalogService.ListProducts(
 			context.Background(),
 			shareddomain.ProductFilter{Page: 1, Limit: 1},

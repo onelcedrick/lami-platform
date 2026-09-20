@@ -1,44 +1,48 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
+import { getHomePathForRole } from "@/lib/auth-routing";
 import TechSidebar from "@/components/layout/TechSidebar";
+import SidebarLayout from "@/components/layout/SidebarLayout";
 
-export default function TechnicianLayout({ children }: { children: React.ReactNode }) {
+export default function TechnicianLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
+    if (!accessToken) {
       router.replace("/login");
       return;
     }
     const role = user?.role;
-    if (role !== "technician" && role !== "admin" && role !== "super_admin") {
-      router.replace("/");
+    const ok =
+      role === "technician" || role === "admin" || role === "super_admin";
+    if (!ok) {
+      router.replace(getHomePathForRole(role));
+      return;
     }
-  }, [user, isAuthenticated, router]);
-
-  const role = user?.role;
-  const allowed =
-    isAuthenticated() &&
-    (role === "technician" || role === "admin" || role === "super_admin");
+    setAllowed(true);
+  }, [user, accessToken, router]);
 
   if (!allowed) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-500">
-        Verification des droits...
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+        Vérification des droits...
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <TechSidebar />
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
-      </div>
-    </div>
+    <SidebarLayout sidebar={<TechSidebar />} storageKey="lami-tech-sidebar-open">
+      {children}
+    </SidebarLayout>
   );
 }

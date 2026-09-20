@@ -194,7 +194,31 @@ export const api = {
     request("/api/v1/users/settings/shop", { method: "PUT", body: JSON.stringify(body) }),
   getInvoice: (id: string) => request(`/api/v1/orders/${id}/invoice`),
   getInvoicePDFUrl: (id: string) =>
-    `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/orders/${id}/invoice.pdf`,
+    `${API_BASE}/api/v1/orders/${id}/invoice.pdf`,
+
+  /**
+   * Télécharge la facture PDF via fetch authentifié.
+   * (getInvoicePDFUrl ne porte pas le token → à utiliser avec fetch ici)
+   */
+  downloadInvoicePDF: async (id: string, filename = "facture.pdf") => {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("access_token")
+        : null;
+    const res = await fetch(`${API_BASE}/api/v1/orders/${id}/invoice.pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 
   getOrderStats: (days = 30) =>
     request(`/api/v1/orders/stats?days=${days}`),

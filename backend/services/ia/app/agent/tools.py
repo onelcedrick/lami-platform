@@ -63,7 +63,7 @@ class ToolRegistry:
                         },
                         "max_price": {
                             "type": "number",
-                            "description": "Budget maximum en euros",
+                            "description": "Budget maximum en Ariary (MGA)",
                         },
                         "limit": {
                             "type": "integer",
@@ -207,6 +207,10 @@ class ToolRegistry:
             resp.raise_for_status()
             return resp.json()
 
+    # -----------------------------------------------------------------------
+    # Outils — Catalogue
+    # -----------------------------------------------------------------------
+
     async def _search_products(
         self,
         args: dict,
@@ -273,6 +277,10 @@ class ToolRegistry:
         except Exception as e:
             return {"error": str(e), "categories": []}
 
+    # -----------------------------------------------------------------------
+    # Outils — Support
+    # -----------------------------------------------------------------------
+
     async def _create_ticket(
         self,
         args: dict,
@@ -303,6 +311,10 @@ class ToolRegistry:
         except Exception as e:
             return {"error": f"Impossible de creer le ticket: {e}"}
 
+    # -----------------------------------------------------------------------
+    # Outils — Configuration PC (budget-aware + backtracking)
+    # -----------------------------------------------------------------------
+
     async def _suggest_pc_build(
         self,
         args: dict,
@@ -311,11 +323,11 @@ class ToolRegistry:
     ) -> Any:
         usage = (args.get("usage") or "gaming").lower().replace("é", "e")
         budget = float(args.get("budget") or 0)
-        # Si budget trop bas (< 100k), on suppose une erreur (euros) → convertir approx
+
+        # Si budget trop bas (< 100k), on suppose une erreur (euros) → conversion
         if 0 < budget < 100000:
             budget = budget * 4500  # approx EUR→MGA pour demos
 
-        # Allocation budget par slot selon usage (Madagascar / Ar)
         allocations = {
             "gaming": {
                 "CPU": 0.22, "GPU": 0.35, "RAM": 0.12, "Stockage": 0.10,
@@ -343,7 +355,6 @@ class ToolRegistry:
         )
         catalog = result.get("products") or []
         if not catalog:
-            # fallback recherches par tags usage
             for term in [usage, "gaming", "pc"]:
                 r = await self._search_products(
                     {"search": term, "max_price": budget, "limit": 20},
@@ -380,35 +391,87 @@ class ToolRegistry:
             }.get(slot, [slot.lower()])
             return any(k in blob for k in keys)
 
-        build = []
-        remaining = budget
-        for slot, ratio in slots.items():
-            cap = budget * ratio * 1.15  # souplesse 15%
+        # ✅ ALGORITHME BUDGET-AWARE avec backtracking
+        priority_order = [
+            "CPU", "GPU", "RAM", "Stockage",
+            "Carte mere", "Alimentation", "Boitier", "Ecrans",
+        ]
+        ordered_slots = [s for s in priority_order if s in slots]
+
+        def build_recursive(slot_idx: int, remaining: float, current: list) -> Optional[list]:
+            """Essaie de remplir les slots en respectant le budget restant."""
+            if slot_idx >= len(ordered_slots):
+                return current
+
+            slot = ordered_slots[slot_idx]
+
             candidates = [
                 p for p in products
-                if match_slot(p, slot) and float(p.get("price") or 0) <= min(cap, remaining)
+                if match_slot(p, slot) and float(p.get("price") or 0) <= remaining
             ]
             candidates.sort(key=lambda p: float(p.get("price") or 0), reverse=True)
-            if not candidates:
-                # elargir sans cap strict
-                candidates = [p for p in products if match_slot(p, slot)]
-                candidates.sort(key=lambda p: float(p.get("price") or 0))
-            if candidates:
-                chosen = candidates[0]
+
+            for chosen in candidates:
                 price = float(chosen.get("price") or 0)
-                build.append({
+                # Vérifier qu'il reste assez pour les slots suivants
+                min_needed = sum(
+                    slots.get(s, 0) * budget * 0.5
+                    for s in ordered_slots[slot_idx + 1:]
+                )
+                if remaining - price < min_needed * 0.3:
+                    continue
+
+                build_item = {
                     "slot": slot,
                     "id": chosen.get("id"),
                     "name": chosen.get("name"),
                     "brand": chosen.get("brand"),
                     "price": price,
                     "sku": chosen.get("sku"),
-                })
-                remaining -= price
-                # retirer le produit choisi
-                products = [p for p in products if p.get("id") != chosen.get("id")]
+                }
+                result = build_recursive(
+                    slot_idx + 1,
+                    remaining - price,
+                    current + [build_item],
+                )
+                if result is not None:
+                    return result
+
+            # Aucun candidat → on continue sans ce slot
+            return build_recursive(slot_idx + 1, remaining, current)
+
+        build = build_recursive(0, budget, [])
+        if build is None:
+            build = []
 
         total = sum(c["price"] for c in build)
+
+        # ✅ VÉRIFICATION FINALE : retirer les composants les plus chers si dépassement
+        while total > budget and build:
+            most_expensive = max(build, key=lambda c: c["price"])
+            if len(build) == 1 and most_expensive["slot"] == "CPU":
+                break
+            build = [c for c in build if c["id"] != most_expensive["id"]]
+            total = sum(c["price"] for c in build)
+
+        # Réponse claire si aucun composant
+        if not build:
+            return {
+                "usage": usage,
+                "budget": budget,
+                "currency": "MGA",
+                "components": [],
+                "suggested_components": [],
+                "estimated_total": 0,
+                "remaining_budget": budget,
+                "within_budget": False,
+                "slots_filled": 0,
+                "error": (
+                    f"Budget insuffisant ({budget:,.0f} Ar) pour une configuration {usage}. "
+                    f"Essayez un budget supérieur."
+                ).replace(",", " "),
+            }
+
         return {
             "usage": usage,
             "budget": budget,

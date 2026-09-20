@@ -37,7 +37,7 @@ export default function AdminSidebar() {
   };
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       {/* Header */}
       <div className="flex h-16 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
         <LogoIcon size={28} />

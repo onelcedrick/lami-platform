@@ -16,4 +16,5 @@ type TicketRepository interface {
 	List(ctx context.Context, page, limit int, status, priority, category string) ([]shareddomain.Ticket, int64, error)
 	AddMessage(ctx context.Context, ticketID string, msg shareddomain.TicketMessage) error
 	AddInternalNote(ctx context.Context, ticketID string, note shareddomain.TicketNote) error
+	CountOpenByAssignee(ctx context.Context, assigneeID string) (int64, error) // ← AJOUT
 }

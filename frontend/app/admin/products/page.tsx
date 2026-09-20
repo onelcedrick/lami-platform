@@ -8,6 +8,7 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import ProductImportModal from "@/components/admin/ProductImportModal";
 import ImageUploader from "@/components/admin/ImageUploader";
 import AttributesEditor from "@/components/admin/AttributesEditor";
+import LazyImage from "@/components/ui/LazyImage";
 
 interface Category {
   id: string;
@@ -439,9 +440,10 @@ export default function AdminProductsPage() {
       )}
 
       <div className="card mt-6 overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className="w-full min-w-[820px] text-left text-sm">
           <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-900/50">
             <tr>
+              <th className="w-16 px-4 py-3">Photo</th>
               <th className="px-4 py-3">Produit</th>
               <th className="px-4 py-3">Categorie</th>
               <th className="px-4 py-3">Prix (Ar)</th>
@@ -453,13 +455,13 @@ export default function AdminProductsPage() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
                   Chargement...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
                   Aucun produit
                   <div className="mt-3">
                     <button type="button" onClick={openCreate} className="btn-primary text-sm">
@@ -472,8 +474,40 @@ export default function AdminProductsPage() {
               filtered.map((p) => {
                 const low = p.stock > 0 && p.stock <= (p.stock_alert || 5);
                 const out = p.stock <= 0;
+                const hasImage = p.images && p.images.length > 0;
                 return (
                   <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                    {/* ✅ Miniature produit */}
+                    <td className="px-4 py-3">
+                      <a
+                        href={hasImage ? p.images![0] : "#"}
+                        target={hasImage ? "_blank" : undefined}
+                        rel={hasImage ? "noopener noreferrer" : undefined}
+                        className={`block h-12 w-12 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 ${
+                          hasImage
+                            ? "hover:border-primary-400 hover:shadow-md"
+                            : "cursor-default"
+                        }`}
+                        title={hasImage ? "Voir l'image" : "Aucune image"}
+                        onClick={(e) => {
+                          if (!hasImage) e.preventDefault();
+                        }}
+                      >
+                        {hasImage ? (
+                          <LazyImage
+                            src={p.images![0]}
+                            alt={p.name}
+                            fallbackText={p.brand}
+                            fill
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] font-medium text-slate-300 dark:text-slate-600">
+                            N/A
+                          </div>
+                        )}
+                      </a>
+                    </td>
+
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900 dark:text-slate-100">
                         {p.name}

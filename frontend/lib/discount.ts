@@ -48,7 +48,7 @@ export function applyDiscount(
     const pct = Math.min(Math.max(d.value, 0), 100);
     result = priceAr * (1 - pct / 100);
   } else if (d.type === "fixed_amount") {
-    // ⚠️ Fallback : si la valeur est très petite et que le prix est grand,
+    //  Fallback : si la valeur est très petite et que le prix est grand,
     // on suppose que la remise a été saisie en EUR → conversion.
     // Cette heuristique est fragile ; à terme, stocker la devise
     // avec la remise et supprimer cette logique.

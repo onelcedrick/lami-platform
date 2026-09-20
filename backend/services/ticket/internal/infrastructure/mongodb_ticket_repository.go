@@ -120,3 +120,19 @@ func (r *MongoTicketRepository) AddInternalNote(ctx context.Context, ticketID st
 	})
 	return err
 }
+
+// CountOpenByAssignee compte les tickets actifs pour un technicien
+// (utilisé pour la distribution least-loaded)
+func (r *MongoTicketRepository) CountOpenByAssignee(ctx context.Context, assigneeID string) (int64, error) {
+	filter := bson.M{
+		"assigned_to": assigneeID,
+		"status": bson.M{
+			"$in": []string{
+				string(shareddomain.TicketStatusOpen),
+				string(shareddomain.TicketStatusInProgress),
+				string(shareddomain.TicketStatusWaiting),
+			},
+		},
+	}
+	return r.collection.CountDocuments(ctx, filter)
+}

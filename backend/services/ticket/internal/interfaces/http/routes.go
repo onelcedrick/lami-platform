@@ -8,27 +8,43 @@ import (
 func SetupRoutes(app *fiber.App, handler *TicketHandler, jwtSecret string) {
 	api := app.Group("/api/v1/tickets")
 
-	// Fichiers publics (lecture images/PDF)
+	// ============================================================
+	// Middlewares réutilisables (déclarés UNE fois)
+	// ============================================================
+	authMw := middleware.AuthRequired(jwtSecret)
+	techMw := middleware.RoleRequired("technician", "admin", "super_admin")
+	adminMw := middleware.RoleRequired("admin", "super_admin")
+
+	// ============================================================
+	// Routes PUBLIQUES (aucun middleware)
+	// ============================================================
 	api.Get("/files/:filename", handler.ServeFile)
 	api.Get("/health", handler.Health)
 
-	protected := api.Group("", middleware.AuthRequired(jwtSecret))
-	protected.Post("/", handler.CreateTicket)
-	protected.Get("/me", handler.GetMyTickets)
-	protected.Post("/upload", handler.UploadFile)
+	// ============================================================
+	// Routes AUTHENTIFIÉES (client connecté)
+	// ============================================================
+	api.Post("/", authMw, handler.CreateTicket)
+	api.Get("/me", authMw, handler.GetMyTickets)
+	api.Post("/upload", authMw, handler.UploadFile)
 
-	// IMPORTANT: routes fixes AVANT /:id sinon "open"/"assigned" matchent GetTicket
-	tech := api.Group("", middleware.AuthRequired(jwtSecret), middleware.RoleRequired("technician", "admin", "super_admin"))
-	tech.Get("/assigned", handler.GetAssignedTickets)
-	tech.Get("/open", handler.ListOpenTickets)
-	tech.Post("/:id/assign", handler.AssignTicket)
+	// ============================================================
+	// Routes TECHNICIEN + ADMIN (avant /:id pour éviter les conflits)
+	// ============================================================
+	api.Get("/assigned", authMw, techMw, handler.GetAssignedTickets)
+	api.Get("/open", authMw, techMw, handler.ListOpenTickets)
+	api.Post("/:id/assign", authMw, techMw, handler.AssignTicket)
+	api.Patch("/:id/status", authMw, techMw, handler.UpdateStatus)
 
-	admin := api.Group("", middleware.AuthRequired(jwtSecret), middleware.RoleRequired("admin", "super_admin"))
-	admin.Get("/", handler.ListTickets)
+	// ============================================================
+	// Routes ADMIN uniquement
+	// ============================================================
+	api.Get("/", authMw, adminMw, handler.ListTickets)
 
-	// Parametriques en dernier
-	protected.Get("/:id", handler.GetTicket)
-	protected.Patch("/:id/status", handler.UpdateStatus)
-	protected.Post("/:id/messages", handler.AddMessage)
-	protected.Get("/:id/stream", handler.StreamMessages)
+	// ============================================================
+	// Routes PARAMÉTRÉES en DERNIER (sinon "open"/"assigned" matchent :id)
+	// ============================================================
+	api.Get("/:id", authMw, handler.GetTicket)
+	api.Post("/:id/messages", authMw, handler.AddMessage)
+	api.Get("/:id/stream", authMw, handler.StreamMessages)
 }

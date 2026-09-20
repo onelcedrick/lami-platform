@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useFavoritesStore, useCartStore, useAuthStore } from "@/lib/store";
 import { formatAriary } from "@/lib/currency";
 import LazyImage from "@/components/ui/LazyImage";
+import { HeartIcon, ChevronRightIcon, CartIcon } from "@/components/ui/icons";
 
 export default function FavoritesPage() {
   const router = useRouter();
@@ -21,68 +22,120 @@ export default function FavoritesPage() {
 
   if (!isAuthenticated()) return null;
 
+  // ----- État vide -----
   if (items.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mes favoris</h1>
-        <p className="mt-2 text-slate-500">Aucun produit favori pour le moment.</p>
+      <div className="mx-auto max-w-lg px-4 py-20 text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+          <HeartIcon
+            size={32}
+            className="text-slate-300 dark:text-slate-600"
+          />
+        </div>
+        <h1 className="mt-6 text-2xl font-bold text-slate-900 dark:text-slate-100">
+          Aucun favori pour le moment
+        </h1>
+        <p className="mt-2 text-slate-500 dark:text-slate-400">
+          Ajoutez des produits à vos favoris pour les retrouver facilement
+        </p>
         <Link href="/catalog" className="btn-primary mt-6 inline-flex">
-          Voir le catalogue
+          Découvrir le catalogue
+          <ChevronRightIcon size={16} />
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Mes favoris ({items.length})
-        </h1>
-        <button type="button" onClick={() => clear()} className="text-sm text-red-600 hover:underline">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <HeartIcon size={14} filled className="text-red-500" />
+            Mes favoris
+          </div>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
+            {items.length} produit{items.length > 1 ? "s" : ""} favori
+            {items.length > 1 ? "s" : ""}
+          </h1>
+        </div>
+        <button
+          type="button"
+          onClick={() => clear()}
+          className="text-sm font-medium text-red-600 transition hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+        >
           Tout retirer
         </button>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
+      {/* Grille */}
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {items.map((item) => (
           <div
             key={item.productId}
-            className="card flex flex-col overflow-hidden p-4"
+            className="group card relative flex flex-col overflow-hidden transition hover:-translate-y-1 hover:shadow-lg dark:hover:border-slate-600"
           >
-            <Link href={`/product/${item.slug || item.productId}`} className="flex h-32 items-center justify-center bg-slate-50 dark:bg-slate-800">
-              <LazyImage src={item.image} alt={item.name} fallbackText={item.brand || "LAMI"} />
-            </Link>
-            <p className="mt-2 text-xs uppercase text-slate-400">{item.brand}</p>
+            {/* Image */}
             <Link
-              href={`/product/${item.slug || item.productId}`}
-              className="font-semibold text-slate-900 hover:text-primary-600 dark:text-white"
+              href={`/product/${encodeURIComponent(item.slug || item.productId)}`}
+              className="relative block aspect-[4/3] overflow-hidden bg-slate-50 dark:bg-slate-800/60"
             >
-              {item.name}
+              <LazyImage
+                src={item.image}
+                alt={item.name}
+                fallbackText={item.brand || "LAMI"}
+                fill
+                className="transition-transform duration-500 group-hover:scale-105"
+              />
             </Link>
-            <p className="mt-1 font-bold text-primary-600">{formatAriary(item.price)}</p>
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                className="btn-primary flex-1 text-sm"
-                onClick={() =>
-                  addItem({
-                    productId: item.productId,
-                    name: item.name,
-                    price: item.price,
-                    quantity: 1,
-                    image: item.image,
-                  })
-                }
+
+            {/* Bouton retirer (flottant) */}
+            <button
+              type="button"
+              onClick={() => remove(item.productId)}
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-500 shadow-sm backdrop-blur transition hover:bg-white hover:scale-110 dark:bg-slate-900/90 dark:hover:bg-slate-900"
+              aria-label="Retirer des favoris"
+            >
+              <HeartIcon size={16} filled />
+            </button>
+
+            {/* Contenu */}
+            <div className="flex flex-1 flex-col p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                {item.brand}
+              </p>
+              <Link
+                href={`/product/${encodeURIComponent(item.slug || item.productId)}`}
+                className="mt-1 line-clamp-2 text-sm font-semibold text-slate-900 transition hover:text-primary-600 dark:text-slate-100 dark:hover:text-primary-400"
               >
-                Ajouter au panier
-              </button>
-              <button
-                type="button"
-                className="btn-secondary text-sm"
-                onClick={() => remove(item.productId)}
-              >
-                Retirer
-              </button>
+                {item.name}
+              </Link>
+
+              <div className="mt-auto pt-3">
+                <p className="text-lg font-bold text-primary-600 dark:text-primary-400">
+                  {formatAriary(item.price)}
+                </p>
+
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      addItem({
+                        productId: item.productId,
+                        name: item.name,
+                        price: item.price,
+                        quantity: 1,
+                        image: item.image,
+                      })
+                    }
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
+                  >
+                    <CartIcon size={15} />
+                    Ajouter
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         ))}

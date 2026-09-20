@@ -24,23 +24,26 @@ const (
 )
 
 type Ticket struct {
-	ID              string         `json:"id" bson:"_id,omitempty"`
-	TicketNumber    string         `json:"ticket_number" bson:"ticket_number"`
-	UserID          string         `json:"user_id" bson:"user_id"`
-	AssignedTo      string         `json:"assigned_to,omitempty" bson:"assigned_to,omitempty"`
-	Title           string         `json:"title" bson:"title"`
-	Description     string         `json:"description" bson:"description"`
-	Category        string         `json:"category" bson:"category"`
-	Status          TicketStatus   `json:"status" bson:"status"`
-	Priority        TicketPriority `json:"priority" bson:"priority"`
-	Attachments     []string       `json:"attachments,omitempty" bson:"attachments,omitempty"`
-	InternalNotes   []TicketNote   `json:"internal_notes,omitempty" bson:"internal_notes,omitempty"`
-	Messages        []TicketMessage `json:"messages,omitempty" bson:"messages,omitempty"`
-	RelatedOrderID  string         `json:"related_order_id,omitempty" bson:"related_order_id,omitempty"`
-	RelatedProductID string        `json:"related_product_id,omitempty" bson:"related_product_id,omitempty"`
-	ResolvedAt      *time.Time     `json:"resolved_at,omitempty" bson:"resolved_at,omitempty"`
-	CreatedAt       time.Time      `json:"created_at" bson:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at" bson:"updated_at"`
+	ID               string          `json:"id" bson:"_id,omitempty"`
+	TicketNumber     string          `json:"ticket_number" bson:"ticket_number"`
+	UserID           string          `json:"user_id" bson:"user_id"`
+	AssignedTo       string          `json:"assigned_to,omitempty" bson:"assigned_to,omitempty"`
+	AssignedToName   string          `json:"assigned_to_name,omitempty" bson:"assigned_to_name,omitempty"`
+	AssignedAt       *time.Time      `json:"assigned_at,omitempty" bson:"assigned_at,omitempty"`
+	AutoAssigned     bool            `json:"auto_assigned,omitempty" bson:"auto_assigned,omitempty"`
+	Title            string          `json:"title" bson:"title"`
+	Description      string          `json:"description" bson:"description"`
+	Category         string          `json:"category" bson:"category"`
+	Status           TicketStatus    `json:"status" bson:"status"`
+	Priority         TicketPriority  `json:"priority" bson:"priority"`
+	Attachments      []string        `json:"attachments,omitempty" bson:"attachments,omitempty"`
+	InternalNotes    []TicketNote    `json:"internal_notes,omitempty" bson:"internal_notes,omitempty"`
+	Messages         []TicketMessage `json:"messages,omitempty" bson:"messages,omitempty"`
+	RelatedOrderID   string          `json:"related_order_id,omitempty" bson:"related_order_id,omitempty"`
+	RelatedProductID string          `json:"related_product_id,omitempty" bson:"related_product_id,omitempty"`
+	ResolvedAt       *time.Time      `json:"resolved_at,omitempty" bson:"resolved_at,omitempty"`
+	CreatedAt        time.Time       `json:"created_at" bson:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at" bson:"updated_at"`
 }
 
 type TicketNote struct {

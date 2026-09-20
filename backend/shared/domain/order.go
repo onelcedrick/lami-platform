@@ -48,6 +48,8 @@ type Order struct {
 	Status          OrderStatus   `json:"status" bson:"status"`
 	PaymentStatus   PaymentStatus `json:"payment_status" bson:"payment_status"`
 	PaymentMethod   string        `json:"payment_method,omitempty" bson:"payment_method,omitempty"`
+	PaymentReference string       `json:"payment_reference,omitempty" bson:"payment_reference,omitempty"`	
+	PaidAt           *time.Time    `json:"paid_at,omitempty" bson:"paid_at,omitempty"`
 	ShippingAddress Address       `json:"shipping_address" bson:"shipping_address"`
 	BillingAddress  *Address      `json:"billing_address,omitempty" bson:"billing_address,omitempty"`
 	Notes           string        `json:"notes,omitempty" bson:"notes,omitempty"`

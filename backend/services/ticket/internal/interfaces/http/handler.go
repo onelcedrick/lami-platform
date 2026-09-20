@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"context"
 	"bufio"
-	"os"
 	"path/filepath"
 	"strings"
 	"strconv"
@@ -350,5 +349,26 @@ func (h *TicketHandler) ListOpenTickets(c *fiber.Ctx) error {
 		"total": total,
 		"page":  page,
 		"limit": limit,
+	})
+}
+// GetTicketWithTechnician retourne le ticket + les infos d'assignation
+// (nom du technicien, ID, statut d'auto-assignation).
+// Endpoint : GET /api/v1/tickets/:id/technician
+func (h *TicketHandler) GetTicketWithTechnician(c *fiber.Ctx) error {
+	userID, _ := c.Locals("userID").(string)
+	role, _ := c.Locals("role").(string)
+	id := c.Params("id")
+
+	ticket, err := h.service.EnsureAccess(c.Context(), id, userID, role)
+	if err != nil {
+		return response.Forbidden(c, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Ticket recupere", fiber.Map{
+		"ticket":           ticket,
+		"assigned_to_name": ticket.AssignedToName,
+		"assigned_to":      ticket.AssignedTo,
+		"auto_assigned":    ticket.AutoAssigned,
+		"assigned_at":      ticket.AssignedAt,
 	})
 }

@@ -85,10 +85,17 @@ export default function TicketChat({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visible.length]);
 
-  // Polling + SSE pour messages en temps réel
+  // ============================================================
+  // ✅ SSE uniquement (PAS de polling — évite le 429 Too Many Requests)
+  //    Avec backoff exponentiel en cas de déconnexion.
+  // ============================================================
   useEffect(() => {
     if (!ticketId) return;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    let es: EventSource | null = null;
+    let cancelled = false;
+    let retryDelay = 2000;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const tok =
       typeof window !== "undefined"
@@ -97,44 +104,51 @@ export default function TicketChat({
             ?.accessToken ?? null)
         : null;
 
-    const poll = async () => {
+    if (!tok) return;
+
+    const connect = () => {
+      if (cancelled) return;
+      const url = `${API_BASE}/api/v1/tickets/${ticketId}/stream?access_token=${encodeURIComponent(
+        tok
+      )}`;
+
       try {
-        const res = await api.getTicket(ticketId);
-        if (res.success && res.data) {
-          const ticket = res.data as { messages?: ChatMessage[] };
-          if (ticket.messages) onMessagesUpdated(ticket.messages);
-        }
+        es = new EventSource(url);
+
+        es.addEventListener("messages", (ev) => {
+          try {
+            const msgs = JSON.parse((ev as MessageEvent).data || "null");
+            if (Array.isArray(msgs)) {
+              onMessagesUpdated(msgs as ChatMessage[]);
+            }
+          } catch {
+            /* ignore */
+          }
+          // Reset backoff dès qu'on reçoit un événement
+          retryDelay = 2000;
+        });
+
+        es.onerror = () => {
+          es?.close();
+          es = null;
+          if (cancelled) return;
+          // Backoff exponentiel : 2s → 4s → 8s → 16s → 30s max
+          retryTimer = setTimeout(connect, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 30000);
+        };
       } catch {
-        /* silent */
+        // Si EventSource ne peut pas être créé, on retente avec backoff
+        retryTimer = setTimeout(connect, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
       }
     };
-    poll();
-    pollTimer = setInterval(poll, 2000);
 
-    let es: EventSource | null = null;
-    try {
-      const url = `${API_BASE}/api/v1/tickets/${ticketId}/stream?access_token=${encodeURIComponent(
-        tok || ""
-      )}`;
-      es = new EventSource(url);
-      es.addEventListener("messages", (ev) => {
-        try {
-          const msgs = JSON.parse(ev.data) as ChatMessage[];
-          onMessagesUpdated(msgs);
-        } catch {
-          /* ignore */
-        }
-      });
-      es.onerror = () => {
-        /* garde le polling */
-      };
-    } catch {
-      /* SSE non dispo */
-    }
+    connect();
 
     return () => {
-      if (pollTimer) clearInterval(pollTimer);
+      cancelled = true;
       es?.close();
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [ticketId, onMessagesUpdated]);
 

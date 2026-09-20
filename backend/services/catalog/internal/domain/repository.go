@@ -10,7 +10,7 @@ type ProductRepository interface {
 	Create(ctx context.Context, product *shareddomain.Product) error
 	FindByID(ctx context.Context, id string) (*shareddomain.Product, error)
 	FindBySlug(ctx context.Context, slug string) (*shareddomain.Product, error)
-	FindBySKU(ctx context.Context, sku string) (*shareddomain.Product, error)   // ✅ AJOUT
+	FindBySKU(ctx context.Context, sku string) (*shareddomain.Product, error)   //  AJOUT
 	Update(ctx context.Context, product *shareddomain.Product) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, filter shareddomain.ProductFilter) ([]shareddomain.Product, int64, error)

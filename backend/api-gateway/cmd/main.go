@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -70,40 +72,56 @@ func main() {
 	iaURL := cfg.IAServiceURL
 	analyticsURL := cfg.AnalyticsURL
 
-	// Auth
+	// -------------------------------------------------------------------------
+	// Auth — proxy transparent
+	// -------------------------------------------------------------------------
 	app.All("/api/v1/auth/*", proxyHandler(authURL))
+	app.All("/api/v1/auth", proxyHandler(authURL))
 
-	// Users / Profile / GEO
+	// -------------------------------------------------------------------------
+	// Users / Profile / GEO — proxy transparent
+	// -------------------------------------------------------------------------
 	app.All("/api/v1/users/*", proxyHandler(userURL))
 	app.All("/api/v1/users", proxyHandler(userURL))
 
-	// Catalog public
-	app.Get("/api/v1/catalog/products", proxyHandler(catalogURL))
-	app.Get("/api/v1/catalog/products/*", proxyHandler(catalogURL))
-	app.Get("/api/v1/catalog/categories", proxyHandler(catalogURL))
-	app.Get("/api/v1/catalog/health", proxyHandler(catalogURL))
+	// -------------------------------------------------------------------------
+	// Catalog — proxy transparent
+	// -------------------------------------------------------------------------
+	app.All("/api/v1/catalog/*", proxyHandler(catalogURL))
+	app.All("/api/v1/catalog", proxyHandler(catalogURL))
 
-	// Catalog admin
-	adminCatalog := app.Group("/api/v1/catalog", middleware.AuthRequired(cfg.JWTSecret), middleware.RoleRequired("admin", "super_admin"))
-	adminCatalog.All("/*", proxyHandler(catalogURL))
-
-	// Orders (JWT required - le service valide aussi)
+	// -------------------------------------------------------------------------
+	// Orders — proxy transparent
+	// -------------------------------------------------------------------------
 	app.All("/api/v1/orders/*", proxyHandler(orderURL))
 	app.All("/api/v1/orders", proxyHandler(orderURL))
 
-	// Tickets
+	// -------------------------------------------------------------------------
+	// Tickets — SSE stream (PAS de buffer, AVANT le wildcard)
+	// ⚠️ L'ordre est CRITIQUE : cette route doit être déclarée AVANT
+	//    la route wildcard /api/v1/tickets/*, sinon elle ne matchera jamais.
+	// -------------------------------------------------------------------------
+	app.Get("/api/v1/tickets/:id/stream", streamProxyHandler(ticketURL))
+
+	// Tickets — proxy classique
 	app.All("/api/v1/tickets/*", proxyHandler(ticketURL))
 	app.All("/api/v1/tickets", proxyHandler(ticketURL))
 
-	// Notifications
+	// -------------------------------------------------------------------------
+	// Notifications — proxy transparent
+	// -------------------------------------------------------------------------
 	app.All("/api/v1/notifications/*", proxyHandler(notifURL))
 	app.All("/api/v1/notifications", proxyHandler(notifURL))
 
-	// IA Service
+	// -------------------------------------------------------------------------
+	// IA Service — proxy transparent
+	// -------------------------------------------------------------------------
 	app.All("/api/v1/ia/*", proxyHandler(iaURL))
 	app.All("/api/v1/ia", proxyHandler(iaURL))
 
-	// Analytics (visiteurs + logs)
+	// -------------------------------------------------------------------------
+	// Analytics (visiteurs + logs) — proxy transparent
+	// -------------------------------------------------------------------------
 	app.All("/api/v1/analytics/*", proxyHandler(analyticsURL))
 	app.All("/api/v1/analytics", proxyHandler(analyticsURL))
 
@@ -128,6 +146,9 @@ func main() {
 	_ = app.Shutdown()
 }
 
+// -----------------------------------------------------------------------------
+// Proxy handler — transmet la requête et la réponse telles quelles
+// -----------------------------------------------------------------------------
 func proxyHandler(targetBase string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		path := c.Path()
@@ -174,5 +195,82 @@ func proxyHandler(targetBase string) fiber.Handler {
 		}
 
 		return c.Status(resp.StatusCode).Send(respBody)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// streamProxyHandler — proxy SSE (streaming réel, sans buffer)
+//
+// Le proxyHandler classique bufferise la réponse avec io.ReadAll,
+// ce qui casse les Server-Sent Events (le stream ne se termine jamais).
+//
+// Ce handler streame la réponse au fur et à mesure, sans buffer,
+// et n'applique PAS de timeout (les SSE peuvent durer longtemps).
+// -----------------------------------------------------------------------------
+func streamProxyHandler(targetBase string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		path := c.Path()
+		query := string(c.Request().URI().QueryString())
+		target := targetBase + path
+		if query != "" {
+			target += "?" + query
+		}
+
+		// Contexte détaché (survit à la requête entrante Fiber)
+		req, err := http.NewRequestWithContext(context.Background(), c.Method(), target, nil)
+		if err != nil {
+			return response.InternalError(c, "Erreur de construction de la requete")
+		}
+
+		// Copier tous les headers (Authorization, Accept, etc.)
+		c.Request().Header.VisitAll(func(key, value []byte) {
+			k := string(key)
+			if !strings.EqualFold(k, "Host") && !strings.EqualFold(k, "Connection") {
+				req.Header.Set(k, string(value))
+			}
+		})
+
+		// ⚠️ Client HTTP SANS timeout — le SSE peut durer plusieurs minutes
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			applogger.Error().Err(err).Str("target", target).Msg("Erreur proxy SSE")
+			return response.InternalError(c, "Service temporairement indisponible")
+		}
+
+		// ⚠️ PAS de defer ici — le body est fermé par le StreamWriter ci-dessous
+
+		// Copier les headers de réponse (Content-Type: text/event-stream, etc.)
+		for k, vals := range resp.Header {
+			for _, v := range vals {
+				c.Set(k, v)
+			}
+		}
+
+		// ✅ SetBodyStreamWriter = Fiber gère le streaming correctement
+		// Le defer resp.Body.Close() est INSIDE, donc il se déclenche à la
+		// fin du stream (pas avant).
+		c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+			defer resp.Body.Close()
+
+			buf := make([]byte, 4096)
+			for {
+				n, err := resp.Body.Read(buf)
+				if n > 0 {
+					if _, werr := w.Write(buf[:n]); werr != nil {
+						return
+					}
+					if ferr := w.Flush(); ferr != nil {
+						return
+					}
+				}
+				if err != nil {
+					return
+				}
+			}
+		})
+
+		c.Status(resp.StatusCode)
+		return nil
 	}
 }
