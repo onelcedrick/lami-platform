@@ -19,7 +19,7 @@ func SecureCORS() fiber.Handler {
 	return cors.New(cors.Config{
 		AllowOrigins:     origins,
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization, X-Session-Id, X-Requested-With",
 		AllowCredentials: true,
 	})
 }

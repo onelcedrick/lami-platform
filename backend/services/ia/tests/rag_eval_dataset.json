@@ -1,0 +1,306 @@
+{
+  "description": "Dataset d'évaluation du RAG L'AMI — 50 questions couvrant 5 catégories",
+  "version": "1.0",
+  "questions": [
+    {
+      "id": "q01",
+      "query": "Mon PC affiche un écran bleu au démarrage, que faire ?",
+      "expected_doc_titles": ["Ecran bleu (BSOD) - Diagnostic de base"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q02",
+      "query": "Écran bleu avec code MEMORY_MANAGEMENT",
+      "expected_doc_titles": ["Ecran bleu (BSOD) - Diagnostic de base"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q03",
+      "query": "Windows crash avec IRQL_NOT_LESS_OR_EQUAL",
+      "expected_doc_titles": ["Ecran bleu (BSOD) - Diagnostic de base"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q04",
+      "query": "Mon ordinateur ne s'allume pas du tout",
+      "expected_doc_titles": ["PC ne demarre pas - Checklist alimentation"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q05",
+      "query": "Aucun signe de vie quand j'appuie sur le bouton power",
+      "expected_doc_titles": ["PC ne demarre pas - Checklist alimentation"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q06",
+      "query": "Faut-il brancher le câble HDMI sur la carte mère ou la carte graphique ?",
+      "expected_doc_titles": ["Pas de signal ecran - GPU et affichage"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q07",
+      "query": "Mon écran affiche 'No Signal'",
+      "expected_doc_titles": ["Pas de signal ecran - GPU et affichage"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q08",
+      "query": "Le PC bipe plusieurs fois au démarrage",
+      "expected_doc_titles": ["Pas de signal ecran - GPU et affichage"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q09",
+      "query": "Comment faire un Clear CMOS ?",
+      "expected_doc_titles": ["Reset BIOS / Clear CMOS"],
+      "category": "bios"
+    },
+    {
+      "id": "q10",
+      "query": "J'ai oublié le mot de passe BIOS",
+      "expected_doc_titles": ["Reset BIOS / Clear CMOS"],
+      "category": "bios"
+    },
+    {
+      "id": "q11",
+      "query": "Mon CPU chauffe trop, il atteint 95 degrés",
+      "expected_doc_titles": ["Surchauffe CPU - Solutions"],
+      "category": "refroidissement"
+    },
+    {
+      "id": "q12",
+      "query": "Quelle température est normale pour un processeur ?",
+      "expected_doc_titles": ["Surchauffe CPU - Solutions"],
+      "category": "refroidissement"
+    },
+    {
+      "id": "q13",
+      "query": "Mon ventirad fait du bruit et le CPU chauffe",
+      "expected_doc_titles": ["Surchauffe CPU - Solutions"],
+      "category": "refroidissement"
+    },
+    {
+      "id": "q14",
+      "query": "Est-ce que je peux mettre de la DDR4 sur une carte mère AM5 ?",
+      "expected_doc_titles": ["Compatibilite RAM DDR4 vs DDR5"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q15",
+      "query": "Quelle RAM pour un Ryzen 7000 ?",
+      "expected_doc_titles": ["Compatibilite RAM DDR4 vs DDR5"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q16",
+      "query": "Combien de Go de RAM pour le gaming ?",
+      "expected_doc_titles": ["Compatibilite RAM DDR4 vs DDR5"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q17",
+      "query": "Quelle alimentation pour une RTX 4090 ?",
+      "expected_doc_titles": ["Choix alimentation selon GPU"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q18",
+      "query": "Quel wattage pour une RTX 4070 Ti ?",
+      "expected_doc_titles": ["Choix alimentation selon GPU"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q19",
+      "query": "Quelle marque d'alimentation est fiable ?",
+      "expected_doc_titles": ["Choix alimentation selon GPU"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q20",
+      "query": "Comment installer Windows sur un nouveau PC ?",
+      "expected_doc_titles": ["Installation Windows et drivers essentiels"],
+      "category": "installation"
+    },
+    {
+      "id": "q21",
+      "query": "Quels drivers installer en premier ?",
+      "expected_doc_titles": ["Installation Windows et drivers essentiels"],
+      "category": "installation"
+    },
+    {
+      "id": "q22",
+      "query": "Comment activer XMP pour la RAM ?",
+      "expected_doc_titles": ["Installation Windows et drivers essentiels"],
+      "category": "installation"
+    },
+    {
+      "id": "q23",
+      "query": "Mon SSD M.2 n'est pas détecté par Windows",
+      "expected_doc_titles": ["SSD NVMe non detecte"],
+      "category": "stockage"
+    },
+    {
+      "id": "q24",
+      "query": "Le BIOS ne voit pas mon SSD NVMe",
+      "expected_doc_titles": ["SSD NVMe non detecte"],
+      "category": "stockage"
+    },
+    {
+      "id": "q25",
+      "query": "Comment changer le mode SATA en AHCI ?",
+      "expected_doc_titles": ["SSD NVMe non detecte"],
+      "category": "stockage"
+    },
+    {
+      "id": "q26",
+      "query": "Quelle est la politique de retour L'AMI ?",
+      "expected_doc_titles": ["Politique de retour et garantie L'AMI"],
+      "category": "sav"
+    },
+    {
+      "id": "q27",
+      "query": "Quelle est la durée de garantie des produits ?",
+      "expected_doc_titles": ["Politique de retour et garantie L'AMI"],
+      "category": "sav"
+    },
+    {
+      "id": "q28",
+      "query": "Comment faire un SAV ?",
+      "expected_doc_titles": ["Politique de retour et garantie L'AMI"],
+      "category": "sav"
+    },
+    {
+      "id": "q29",
+      "query": "Mon GPU plante uniquement en jeu, écran bleu",
+      "expected_doc_titles": ["Ecran bleu (BSOD) - Diagnostic de base", "Choix alimentation selon GPU"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q30",
+      "query": "PC qui redémarre tout seul pendant les jeux",
+      "expected_doc_titles": ["PC ne demarre pas - Checklist alimentation", "Choix alimentation selon GPU"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q31",
+      "query": "Comment vérifier si mon alimentation est suffisante ?",
+      "expected_doc_titles": ["Choix alimentation selon GPU"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q32",
+      "query": "Le PC démarre mais pas d'image",
+      "expected_doc_titles": ["Pas de signal ecran - GPU et affichage"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q33",
+      "query": "Processeur qui throttlee à cause de la température",
+      "expected_doc_titles": ["Surchauffe CPU - Solutions"],
+      "category": "refroidissement"
+    },
+    {
+      "id": "q34",
+      "query": "Pâte thermique : comment la changer ?",
+      "expected_doc_titles": ["Surchauffe CPU - Solutions"],
+      "category": "refroidissement"
+    },
+    {
+      "id": "q35",
+      "query": "Est-ce qu'un iGPU peut fonctionner sans carte graphique ?",
+      "expected_doc_titles": ["Pas de signal ecran - GPU et affichage"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q36",
+      "query": "Faut-il de la DDR5 pour Intel 13e génération ?",
+      "expected_doc_titles": ["Compatibilite RAM DDR4 vs DDR5"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q37",
+      "query": "Quelle fréquence RAM pour DDR5 ?",
+      "expected_doc_titles": ["Compatibilite RAM DDR4 vs DDR5"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q38",
+      "query": "Comment créer une clé USB bootable Windows ?",
+      "expected_doc_titles": ["Installation Windows et drivers essentiels"],
+      "category": "installation"
+    },
+    {
+      "id": "q39",
+      "query": "Mon écran est noir après mise à jour BIOS",
+      "expected_doc_titles": ["Reset BIOS / Clear CMOS"],
+      "category": "bios"
+    },
+    {
+      "id": "q40",
+      "query": "Comment réinitialiser le BIOS si le PC ne démarre plus ?",
+      "expected_doc_titles": ["Reset BIOS / Clear CMOS"],
+      "category": "bios"
+    },
+    {
+      "id": "q41",
+      "query": "SSD NVMe : quel slot utiliser sur la carte mère ?",
+      "expected_doc_titles": ["SSD NVMe non detecte"],
+      "category": "stockage"
+    },
+    {
+      "id": "q42",
+      "query": "Retour produit sous 30 jours, est-ce possible ?",
+      "expected_doc_titles": ["Politique de retour et garantie L'AMI"],
+      "category": "sav"
+    },
+    {
+      "id": "q43",
+      "query": "Overclocking : est-ce que la garantie saute ?",
+      "expected_doc_titles": ["Politique de retour et garantie L'AMI"],
+      "category": "sav"
+    },
+    {
+      "id": "q44",
+      "query": "Mon PC fait un bruit de ventilateur très fort",
+      "expected_doc_titles": ["Surchauffe CPU - Solutions"],
+      "category": "refroidissement"
+    },
+    {
+      "id": "q45",
+      "query": "Diagnostic : pas de POST, pas de bip",
+      "expected_doc_titles": ["PC ne demarre pas - Checklist alimentation", "Pas de signal ecran - GPU et affichage"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q46",
+      "query": "Différence entre DDR4 et DDR5 en gaming ?",
+      "expected_doc_titles": ["Compatibilite RAM DDR4 vs DDR5"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q47",
+      "query": "Quand utiliser un 80+ Gold vs 80+ Bronze ?",
+      "expected_doc_titles": ["Choix alimentation selon GPU"],
+      "category": "compatibilite"
+    },
+    {
+      "id": "q48",
+      "query": "Faut-il activer EXPO pour Ryzen ?",
+      "expected_doc_titles": ["Installation Windows et drivers essentiels"],
+      "category": "installation"
+    },
+    {
+      "id": "q49",
+      "query": "Le PC s'allume mais l'écran reste noir, ventilateurs tournent",
+      "expected_doc_titles": ["Pas de signal ecran - GPU et affichage"],
+      "category": "diagnostic"
+    },
+    {
+      "id": "q50",
+      "query": "BSOD DRIVER_IRQL_NOT_LESS_OR_EQUAL cause ?",
+      "expected_doc_titles": ["Ecran bleu (BSOD) - Diagnostic de base"],
+      "category": "diagnostic"
+    }
+  ]
+}

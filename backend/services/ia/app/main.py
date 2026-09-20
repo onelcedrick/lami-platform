@@ -58,7 +58,17 @@ def create_app() -> FastAPI:
         allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["*"],
+        # ✅ Explicitement lister les headers autorisés
+        # (avec credentials=True, le wildcard "*" ne fonctionne pas)
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Session-Id",
+            "Accept",
+            "Origin",
+            "X-Requested-With",
+        ],
+        expose_headers=["X-Session-Id"],
     )
 
     app.include_router(router, prefix="/api/v1/ia", tags=["IA"])
