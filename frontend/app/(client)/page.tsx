@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { CpuIcon, ChevronRightIcon, StarIcon } from "@/components/ui/icons";
+import { ChevronRightIcon, CpuIcon, StarIcon } from "@/components/ui/icons";
 import NewArrivals from "@/components/home/NewArrivals";
 import PopularProducts from "@/components/home/PopularProducts";
+import HeroSection from "@/components/home/HeroSection";
 
 const SERVICES = [
   {
@@ -59,72 +60,7 @@ export default function HomePage() {
   return (
     <div className="bg-slate-50 dark:bg-slate-950">
       {/* ===================== HERO ===================== */}
-      <section className="relative overflow-hidden">
-        {/* Gradient de fond subtil */}
-        <div className="absolute inset-0 bg-gradient-to-b from-primary-600 via-primary-700 to-primary-900" />
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-primary-400 blur-3xl" />
-          <div className="absolute -bottom-40 -left-20 h-96 w-96 rounded-full bg-blue-500 blur-3xl" />
-        </div>
-
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
-          <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white backdrop-blur">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-              Toamasina · Madagascar
-            </span>
-
-            <h1 className="mt-6 text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Assistance & maintenance
-              <span className="block bg-gradient-to-r from-primary-200 to-white bg-clip-text text-transparent">
-                informatique + IA
-              </span>
-            </h1>
-
-            <p className="mt-6 max-w-xl text-base leading-relaxed text-primary-100 sm:text-lg">
-              Votre expert en matériel informatique et dépannage technique à
-              Madagascar. Configurez, achetez et obtenez un support intelligent.
-            </p>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/catalog"
-                className="group inline-flex items-center justify-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-primary-700 shadow-lg shadow-primary-900/30 transition hover:bg-primary-50"
-              >
-                Voir les produits
-                <ChevronRightIcon
-                  size={16}
-                  className="transition-transform group-hover:translate-x-0.5"
-                />
-              </Link>
-              <Link
-                href="/register"
-                className="inline-flex items-center justify-center gap-2 rounded-full border-2 border-white/30 bg-white/5 px-7 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:border-white/50 hover:bg-white/10"
-              >
-                Créer un compte
-              </Link>
-            </div>
-
-            {/* Stats */}
-            <div className="mt-14 grid max-w-lg grid-cols-3 gap-6 border-t border-white/15 pt-8">
-              {[
-                { value: "50+", label: "Produits" },
-                { value: "24/7", label: "Assistance IA" },
-                { value: "100%", label: "Satisfaction" },
-              ].map((s) => (
-                <div key={s.label}>
-                  <p className="text-2xl font-bold text-white sm:text-3xl">
-                    {s.value}
-                  </p>
-                  <p className="mt-0.5 text-xs text-primary-200 sm:text-sm">
-                    {s.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      <HeroSection />
 
       {/* ===================== SERVICES ===================== */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
@@ -143,9 +79,7 @@ export default function HomePage() {
               key={s.title}
               className="group rounded-2xl border border-slate-200 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-primary-200 hover:shadow-lg hover:shadow-primary-900/5 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-primary-800/50 dark:hover:shadow-black/20"
             >
-              <div
-                className={`inline-flex h-12 w-12 items-center justify-center rounded-xl ${s.tint}`}
-              >
+              <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl ${s.tint}`}>
                 {s.icon}
               </div>
               <h3 className="mt-4 font-semibold text-slate-900 dark:text-slate-100">
@@ -268,7 +202,7 @@ export default function HomePage() {
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link
                 href="/catalog"
-                className="group inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-primary-700 shadow-lg transition hover:bg-primary-50"
+                className="group inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-primary-700 shadow-lg transition hover:-translate-y-0.5 hover:bg-primary-50"
               >
                 Commencer
                 <ChevronRightIcon
@@ -278,7 +212,7 @@ export default function HomePage() {
               </Link>
               <Link
                 href="/tickets"
-                className="inline-flex items-center gap-2 rounded-full border-2 border-white/30 bg-white/5 px-7 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:border-white/50 hover:bg-white/10"
+                className="inline-flex items-center gap-2 rounded-full border-2 border-white/30 bg-white/5 px-7 py-3.5 text-sm font-semibold text-white backdrop-blur transition hover:-translate-y-0.5 hover:border-white/50 hover:bg-white/10"
               >
                 Support technique
               </Link>

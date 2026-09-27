@@ -1,10 +1,22 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { LogoIcon, PlusIcon, TrashIcon, MessageIcon, XIcon } from "@/components/ui/icons";
+import Link from "next/link";
+import { LogoIcon, PlusIcon, TrashIcon, MessageIcon, XIcon, CartIcon, StarIcon } from "@/components/ui/icons";
 import { useCartStore, useAuthStore } from "@/lib/store";
 import { pushCartToServer } from "@/lib/sync-account";
-import { api } from "@/lib/api";
+import { formatAriary } from "@/lib/currency";
+
+interface ProductCardData {
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  stock: number;
+  image?: string;
+  slug?: string;
+  rating?: number;
+}
 
 interface Message {
   role: "user" | "assistant";
@@ -12,6 +24,7 @@ interface Message {
   mode?: string;
   sources?: { title: string; score: number }[];
   cartAdded?: number;
+  products?: ProductCardData[];
   created_at?: string;
 }
 
@@ -40,7 +53,6 @@ export default function ChatWidget() {
   const addItem = useCartStore((s) => s.addItem);
   const isAuth = useAuthStore((s) => s.isAuthenticated);
 
-  // ----- Session ID pour les anonymes -----
   const getSessionId = useCallback((): string => {
     if (typeof window === "undefined") return "";
     let sid = localStorage.getItem("lami-ia-session");
@@ -51,7 +63,6 @@ export default function ChatWidget() {
     return sid;
   }, []);
 
-  // ----- Headers -----
   const buildHeaders = useCallback((): Record<string, string> => {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -64,29 +75,25 @@ export default function ChatWidget() {
     return headers;
   }, [getSessionId]);
 
-  // ----- Message d'accueil -----
+  // Message d'accueil — SANS EMOJI
   useEffect(() => {
     if (messages.length === 0) {
       setMessages([
         {
           role: "assistant",
           content:
-            "Bonjour 👋 Je suis l'assistant L'AMI.\n\nJe peux vous aider pour :\n• Le support technique (diagnostic, guides)\n• La recherche de composants et configurations PC\n• La création de tickets support\n\nComment puis-je vous aider ?",
+            "Bonjour, je suis l'assistant L'AMI.\n\nJe peux vous aider à :\n• Trouver des composants PC\n• Configurer une machine selon votre budget\n• Diagnostiquer un problème technique\n\nQue recherchez-vous ?",
         },
       ]);
     }
   }, [messages.length]);
 
-  // ----- Scroll auto -----
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
 
-  // ----- Charger l'historique quand on ouvre -----
   useEffect(() => {
-    if (open && showHistory) {
-      loadConversations();
-    }
+    if (open && showHistory) loadConversations();
   }, [open, showHistory]);
 
   const loadConversations = async () => {
@@ -96,9 +103,7 @@ export default function ChatWidget() {
         headers: buildHeaders(),
       });
       const json = await res.json();
-      if (Array.isArray(json)) {
-        setConversations(json);
-      }
+      if (Array.isArray(json)) setConversations(json);
     } catch {
       /* silent */
     } finally {
@@ -121,6 +126,7 @@ export default function ChatWidget() {
             mode: m.mode,
             sources: m.sources,
             cartAdded: m.cart_added,
+            products: m.products || [],
             created_at: m.created_at,
           }))
         );
@@ -143,9 +149,7 @@ export default function ChatWidget() {
         headers: buildHeaders(),
       });
       setConversations((c) => c.filter((x) => x.id !== id));
-      if (conversationId === id) {
-        startNewConversation();
-      }
+      if (conversationId === id) startNewConversation();
     } catch {
       /* silent */
     }
@@ -155,15 +159,13 @@ export default function ChatWidget() {
     setMessages([
       {
         role: "assistant",
-        content:
-          "Nouvelle conversation démarrée. Comment puis-je vous aider ?",
+        content: "Nouvelle conversation. Comment puis-je vous aider ?",
       },
     ]);
     setConversationId(null);
     setShowHistory(false);
   };
 
-  // ----- Envoi du message -----
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -186,11 +188,8 @@ export default function ChatWidget() {
       const json = await res.json();
       const data = json.data || json;
 
-      if (data.conversation_id) {
-        setConversationId(data.conversation_id);
-      }
+      if (data.conversation_id) setConversationId(data.conversation_id);
 
-      // Ajout panier
       let cartAdded = 0;
       const toolCalls = data.tool_calls || [];
       for (const tc of toolCalls) {
@@ -211,9 +210,7 @@ export default function ChatWidget() {
           }
         }
       }
-      if (cartAdded > 0 && isAuth()) {
-        void pushCartToServer();
-      }
+      if (cartAdded > 0 && isAuth()) void pushCartToServer();
 
       setMessages((m) => [
         ...m,
@@ -222,6 +219,7 @@ export default function ChatWidget() {
           content: data.reply || "Désolé, une erreur est survenue.",
           mode: data.mode,
           cartAdded: cartAdded || undefined,
+          products: data.products || [],
           sources: data.sources?.map((s: { title: string; score: number }) => ({
             title: s.title,
             score: s.score,
@@ -233,13 +231,24 @@ export default function ChatWidget() {
         ...m,
         {
           role: "assistant",
-          content:
-            "Le service IA est temporairement indisponible. Réessayez dans un instant.",
+          content: "Le service IA est temporairement indisponible. Réessayez dans un instant.",
         },
       ]);
     } finally {
       setLoading(false);
     }
+  };
+
+  // ----- Ajouter au panier depuis une card -----
+  const handleAddToCart = (p: ProductCardData) => {
+    addItem({
+      productId: p.id,
+      name: p.name,
+      price: p.price,
+      quantity: 1,
+      image: p.image,
+    });
+    if (isAuth()) void pushCartToServer();
   };
 
   return (
@@ -262,41 +271,40 @@ export default function ChatWidget() {
         )}
       </button>
 
-      {/* Panneau chat */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 flex h-[600px] w-[380px] flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-2xl backdrop-blur-xl dark:border-slate-700/50 dark:bg-slate-900 sm:w-[420px]">
+        <div className="fixed bottom-24 right-6 z-50 flex h-[620px] w-[400px] flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-2xl dark:border-slate-700/50 dark:bg-slate-900">
           {/* Header */}
-          <div className="relative flex items-center gap-3 bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-4 text-white">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 backdrop-blur">
-              <LogoIcon size={24} />
+          <div className="flex items-center gap-3 border-b border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-white">
+              <LogoIcon size={22} />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold">
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {showHistory ? "Historique" : "Assistant L'AMI"}
               </p>
-              <p className="flex items-center gap-1.5 text-xs text-primary-100">
+              <p className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
                 {showHistory
-                  ? `${conversations.length} conversation(s)`
-                  : "En ligne · RAG + IA"}
+                  ? `${conversations.length} conversation${conversations.length > 1 ? "s" : ""}`
+                  : "En ligne"}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowHistory(!showHistory)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
-              title={showHistory ? "Nouvelle conversation" : "Historique"}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+              title={showHistory ? "Retour" : "Historique"}
             >
-              {showHistory ? <PlusIcon size={18} /> : <MessageIcon size={18} />}
+              {showHistory ? <PlusIcon size={16} /> : <MessageIcon size={16} />}
             </button>
             {!showHistory && (
               <button
                 type="button"
                 onClick={startNewConversation}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
                 title="Nouvelle conversation"
               >
-                <PlusIcon size={18} />
+                <PlusIcon size={16} />
               </button>
             )}
           </div>
@@ -307,20 +315,14 @@ export default function ChatWidget() {
               {historyLoading ? (
                 <div className="space-y-2 p-4">
                   {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="h-16 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800"
-                    />
+                    <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
                   ))}
                 </div>
               ) : conversations.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <MessageIcon size={32} className="text-slate-300 dark:text-slate-600" />
+                  <MessageIcon size={28} className="text-slate-300 dark:text-slate-600" />
                   <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
                     Aucune conversation
-                  </p>
-                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                    Commencez à discuter pour créer votre historique
                   </p>
                 </div>
               ) : (
@@ -330,27 +332,27 @@ export default function ChatWidget() {
                       key={c.id}
                       type="button"
                       onClick={() => loadConversation(c.id)}
-                      className={`group flex w-full items-start gap-3 rounded-xl p-3 text-left transition ${
+                      className={`group flex w-full items-start gap-2.5 rounded-xl p-2.5 text-left transition ${
                         conversationId === c.id
                           ? "bg-primary-50 dark:bg-primary-950/40"
                           : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
                       }`}
                     >
                       <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                           conversationId === c.id
                             ? "bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300"
                             : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                         }`}
                       >
-                        <MessageIcon size={16} />
+                        <MessageIcon size={14} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                        <p className="truncate text-xs font-medium text-slate-900 dark:text-slate-100">
                           {c.title}
                         </p>
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {c.message_count} message{c.message_count > 1 ? "s" : ""} ·{" "}
+                        <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                          {c.message_count} msg ·{" "}
                           {new Date(c.last_message_at).toLocaleDateString("fr-FR", {
                             day: "2-digit",
                             month: "short",
@@ -360,10 +362,10 @@ export default function ChatWidget() {
                       <button
                         type="button"
                         onClick={(e) => deleteConversation(c.id, e)}
-                        className="rounded-lg p-1.5 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/40"
+                        className="rounded p-1 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/40"
                         title="Supprimer"
                       >
-                        <TrashIcon size={14} />
+                        <TrashIcon size={12} />
                       </button>
                     </button>
                   ))}
@@ -373,62 +375,66 @@ export default function ChatWidget() {
           ) : (
             <>
               {/* Messages */}
-              <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
                 {messages.map((msg, i) => (
                   <div
                     key={i}
-                    className={`flex gap-2 ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
+                    className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     {msg.role === "assistant" && (
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white">
-                        <LogoIcon size={16} />
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-600 text-white">
+                        <LogoIcon size={14} />
                       </div>
                     )}
-                    <div
-                      className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
-                        msg.role === "user"
-                          ? "rounded-br-sm bg-primary-600 text-white"
-                          : "rounded-bl-sm bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <div className="max-w-[85%] space-y-2">
+                      <div
+                        className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                          msg.role === "user"
+                            ? "rounded-br-sm bg-primary-600 text-white"
+                            : "rounded-bl-sm bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
 
-                      {msg.cartAdded ? (
-                        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          {msg.cartAdded} article(s) ajouté(s) au panier
-                        </div>
-                      ) : null}
-
-                      {msg.sources && msg.sources.length > 0 && (
-                        <details className="mt-2 border-t border-slate-200/60 pt-2 dark:border-slate-700">
-                          <summary className="cursor-pointer text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            {msg.sources.length} source(s)
-                          </summary>
-                          <div className="mt-1.5 space-y-1">
-                            {msg.sources.map((s, j) => (
-                              <p
-                                key={j}
-                                className="flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400"
-                              >
-                                <span className="truncate">{s.title}</span>
-                                <span className="shrink-0 rounded-full bg-primary-100 px-1.5 py-0.5 text-[9px] font-semibold text-primary-700 dark:bg-primary-950/50 dark:text-primary-300">
-                                  {(s.score * 100).toFixed(0)}%
-                                </span>
-                              </p>
-                            ))}
+                        {msg.cartAdded ? (
+                          <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            {msg.cartAdded} article(s) ajouté(s)
                           </div>
-                        </details>
-                      )}
+                        ) : null}
 
-                      {msg.mode && msg.role === "assistant" && (
-                        <p className="mt-1.5 text-[9px] uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                          {msg.mode}
-                        </p>
+                        {msg.sources && msg.sources.length > 0 && (
+                          <details className="mt-2 border-t border-slate-200/60 pt-2 dark:border-slate-700">
+                            <summary className="cursor-pointer text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              {msg.sources.length} source(s)
+                            </summary>
+                            <div className="mt-1.5 space-y-1">
+                              {msg.sources.map((s, j) => (
+                                <p key={j} className="flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                                  <span className="truncate">{s.title}</span>
+                                  <span className="shrink-0 rounded-full bg-primary-100 px-1.5 py-0.5 text-[9px] font-semibold text-primary-700 dark:bg-primary-950/50 dark:text-primary-300">
+                                    {(s.score * 100).toFixed(0)}%
+                                  </span>
+                                </p>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+
+                      {/* ✅ Cards produits */}
+                      {msg.products && msg.products.length > 0 && (
+                        <div className="space-y-1.5">
+                          {msg.products.map((p) => (
+                            <ProductCardInline
+                              key={p.id}
+                              product={p}
+                              onAdd={() => handleAddToCart(p)}
+                            />
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -436,8 +442,8 @@ export default function ChatWidget() {
 
                 {loading && (
                   <div className="flex gap-2 justify-start">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white">
-                      <LogoIcon size={16} />
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-600 text-white">
+                      <LogoIcon size={14} />
                     </div>
                     <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-3 dark:bg-slate-800">
                       <div className="flex gap-1">
@@ -458,7 +464,7 @@ export default function ChatWidget() {
                     "PC gaming 3M Ar",
                     "Config bureautique 1.5M",
                     "Écran bleu au démarrage",
-                    "Voir le catalogue",
+                    "RTX 4070",
                   ].map((s) => (
                     <button
                       key={s}
@@ -491,9 +497,9 @@ export default function ChatWidget() {
                   <button
                     type="submit"
                     disabled={loading || !input.trim()}
-                    className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white transition hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600 text-white transition hover:bg-primary-700 disabled:opacity-50"
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="m22 2-7 20-4-9-9-4Z" />
                       <path d="M22 2 11 13" />
                     </svg>
@@ -505,5 +511,76 @@ export default function ChatWidget() {
         </div>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card produit inline dans le chat
+// ---------------------------------------------------------------------------
+
+function ProductCardInline({
+  product,
+  onAdd,
+}: {
+  product: ProductCardData;
+  onAdd: () => void;
+}) {
+  const href = `/product/${encodeURIComponent(product.slug || product.id)}`;
+
+  return (
+    <div className="flex gap-2.5 rounded-xl border border-slate-200 bg-white p-2 transition hover:border-primary-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-700">
+      {/* Image */}
+      <Link
+        href={href}
+        className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-700"
+      >
+        {product.image ? (
+          <img
+            src={product.image}
+            alt={product.name}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
+            {product.brand?.slice(0, 2) || "?"}
+          </div>
+        )}
+      </Link>
+
+      {/* Infos */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Link
+          href={href}
+          className="line-clamp-1 text-xs font-medium text-slate-900 hover:text-primary-600 dark:text-slate-100 dark:hover:text-primary-400"
+        >
+          {product.name}
+        </Link>
+        <p className="text-[10px] uppercase tracking-wide text-slate-400">
+          {product.brand}
+        </p>
+        <div className="mt-auto flex items-center justify-between gap-1.5 pt-1">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-primary-600 dark:text-primary-400">
+              {formatAriary(product.price)}
+            </p>
+            {product.rating && product.rating > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-amber-500">
+                <StarIcon size={10} />
+                {product.rating.toFixed(1)}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={product.stock <= 0}
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-primary-600 px-2 text-[10px] font-medium text-white transition hover:bg-primary-700 disabled:opacity-50"
+          >
+            <CartIcon size={10} />
+            Ajouter
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

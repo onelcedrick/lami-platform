@@ -217,11 +217,32 @@ class ToolRegistry:
         auth_token: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> Any:
+        # ✅ Recherche multi-termes selon la catégorie
+        CATEGORY_SEARCH = {
+            "Stockage": "SSD",
+            "CPU": "Ryzen Intel",
+            "GPU": "RTX GeForce",
+            "RAM": "DDR",
+            "Alimentation": "alimentation",
+            "Carte mere": "carte mere",
+            "Boitier": "boitier",
+            "Refroidissement": "ventirad",
+        }
+
         params: dict[str, Any] = {"limit": args.get("limit", 5)}
-        if args.get("search"):
-            params["search"] = args["search"]
-        if args.get("category"):
-            params["category_id"] = args["category"]
+        search_term = (args.get("search") or "").strip()
+        category = (args.get("category") or "").strip()
+
+        if category:
+            # Utiliser le terme dédié à la catégorie
+            cat_term = CATEGORY_SEARCH.get(category, category)
+            if search_term:
+                params["search"] = f"{search_term} {cat_term}"
+            else:
+                params["search"] = cat_term
+        elif search_term:
+            params["search"] = search_term
+
         if args.get("max_price") is not None:
             params["max_price"] = args["max_price"]
 
@@ -229,17 +250,24 @@ class ToolRegistry:
         try:
             data = await self._http_get(url, params=params)
             products = data.get("data", [])
-            simplified = [
-                {
-                    "id": p.get("id"),
-                    "name": p.get("name"),
-                    "brand": p.get("brand"),
-                    "price": p.get("price"),
-                    "stock": p.get("stock"),
-                    "usage_tags": p.get("usage_tags", []),
-                }
-                for p in products[: params["limit"]]
-            ]
+
+            simplified: list[dict[str, Any]] = []
+            for p in products[: params["limit"]]:
+                images = p.get("images") or []
+                simplified.append(
+                    {
+                        "id": p.get("id"),
+                        "name": p.get("name"),
+                        "slug": p.get("slug"),
+                        "brand": p.get("brand"),
+                        "price": p.get("price"),
+                        "stock": p.get("stock"),
+                        "rating": p.get("rating"),
+                        "image": images[0] if images else None,
+                        "usage_tags": p.get("usage_tags", []),
+                    }
+                )
+
             return {"products": simplified, "count": len(simplified)}
         except Exception as e:
             return {"error": f"Catalogue indisponible: {e}", "products": []}
@@ -348,19 +376,31 @@ class ToolRegistry:
         }
         slots = allocations.get(usage, allocations["gaming"])
 
-        # Charger catalogue large
-        result = await self._search_products(
-            {"search": "", "max_price": budget, "limit": 50},
-            auth_token=auth_token,
-        )
-        catalog = result.get("products") or []
+        # ✅ Chercher par catégorie au lieu de search vide
+        catalog: list[dict] = []
+        for cat in ["CPU", "GPU", "RAM", "Stockage", "Carte mere", "Alimentation", "Boitier"]:
+            r = await self._search_products(
+                {"category": cat, "max_price": budget, "limit": 20},
+                auth_token=auth_token,
+            )
+            catalog.extend(r.get("products") or [])
+
+        # Fallback : chercher plus large sans limite de prix
         if not catalog:
-            for term in [usage, "gaming", "pc"]:
+            for term in [usage, "gaming", "pc", "ryzen", "rtx"]:
                 r = await self._search_products(
-                    {"search": term, "max_price": budget, "limit": 20},
+                    {"search": term, "limit": 30},
                     auth_token=auth_token,
                 )
                 catalog.extend(r.get("products") or [])
+
+        # Si toujours rien, chercher TOUT le catalogue (limité)
+        if not catalog:
+            r = await self._search_products(
+                {"limit": 50},
+                auth_token=auth_token,
+            )
+            catalog.extend(r.get("products") or [])
 
         # Dedup
         seen = set()

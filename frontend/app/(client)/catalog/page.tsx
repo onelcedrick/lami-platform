@@ -10,15 +10,14 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import ProductCard from "@/components/catalog/ProductCard";
-import SmartSearch from "@/components/search/SmartSearch";
+import ProductListItem from "@/components/catalog/ProductListItem";
+import FilterSidebar from "@/components/catalog/FilterSidebar";
+import CatalogToolbar, {
+  SortKey,
+  ViewMode,
+} from "@/components/catalog/CatalogToolbar";
 import { filterProducts, SearchableProduct } from "@/lib/search";
-import { formatAriary } from "@/lib/currency";
-import {
-  CpuIcon,
-  ChevronRightIcon,
-  FilterIcon,
-  XIcon,
-} from "@/components/ui/icons";
+import { CpuIcon, FilterIcon, XIcon, ChevronDownIcon } from "@/components/ui/icons";
 
 interface Product extends SearchableProduct {
   id: string;
@@ -53,53 +52,42 @@ interface Discount {
   is_active: boolean;
 }
 
-type SortKey =
-  | "relevance"
-  | "popularity"
-  | "price_asc"
-  | "price_desc"
-  | "name";
-
-const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "relevance", label: "Pertinence" },
-  { value: "popularity", label: "Popularité" },
-  { value: "price_asc", label: "Prix croissant" },
-  { value: "price_desc", label: "Prix décroissant" },
-  { value: "name", label: "Nom (A-Z)" },
-];
-
 const USAGE_TAGS = ["gaming", "bureautique", "creation", "streaming"];
-
-// ---------------------------------------------------------------------------
-// Composant interne
-// ---------------------------------------------------------------------------
+const PAGE_SIZE = 12;
 
 function CatalogInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // ----- Params URL (source de vérité) -----
+  // URL params
   const urlSearch = searchParams.get("search") || "";
   const urlCategory = searchParams.get("category") || "";
   const urlSort = (searchParams.get("sort") as SortKey) || "relevance";
   const urlInStock = searchParams.get("in_stock") === "true";
   const urlUsage = searchParams.get("usage") || "";
+  const urlBrands = searchParams.get("brands")?.split(",").filter(Boolean) || [];
+  const urlMinPrice = searchParams.get("min_price");
+  const urlMaxPrice = searchParams.get("max_price");
 
-  // ----- Données -----
+  // Data
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ----- Filtres locaux (miroir des params URL) -----
+  // Filters
   const [search, setSearch] = useState(urlSearch);
-  const [selectedCategory, setSelectedCategory] = useState(""); // id de catégorie
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>(urlSort);
   const [inStockOnly, setInStockOnly] = useState(urlInStock);
   const [usageFilter, setUsageFilter] = useState(urlUsage);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>(urlBrands);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  // ----- Helpers URL -----
+  // URL sync
   const updateURL = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -113,19 +101,27 @@ function CatalogInner() {
     [router, searchParams]
   );
 
-  // ----- Chargement initial -----
+  // Load data
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
         const [prodRes, catRes, discRes] = await Promise.all([
-          api.listProducts({ limit: "100" }),
+          api.listProducts({ limit: "1000" }),
           api.listCategories(),
           api.listActiveDiscounts(),
         ]);
 
         if (prodRes.success && prodRes.data) {
-          setAllProducts(prodRes.data as Product[]);
+          const products = prodRes.data as Product[];
+          setAllProducts(products);
+          if (products.length > 0) {
+            const prices = products.map((p) => p.price);
+            setPriceRange([
+              urlMinPrice ? Number(urlMinPrice) : Math.min(...prices),
+              urlMaxPrice ? Number(urlMaxPrice) : Math.max(...prices),
+            ]);
+          }
         }
         if (catRes.success && catRes.data) {
           const cats = catRes.data as Category[];
@@ -144,30 +140,46 @@ function CatalogInner() {
           setDiscounts(discRes.data as Discount[]);
         }
       } catch {
-        // silent
+        /* silent */
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [urlCategory]);
+  }, [urlCategory, urlMinPrice, urlMaxPrice]);
 
-  // ----- Sync URL → state quand l'URL change (back/forward) -----
+  // Sync URL → state
   useEffect(() => setSearch(urlSearch), [urlSearch]);
   useEffect(() => setSortBy(urlSort), [urlSort]);
   useEffect(() => setInStockOnly(urlInStock), [urlInStock]);
   useEffect(() => setUsageFilter(urlUsage), [urlUsage]);
+  useEffect(() => setSelectedBrands(urlBrands), [urlBrands.join(",")]);
 
-  // ----- Filtrage + tri (client-side) -----
+  // Bornes prix
+  const priceBounds: [number, number] = useMemo(() => {
+    if (allProducts.length === 0) return [0, 10000000];
+    const prices = allProducts.map((p) => p.price);
+    return [Math.min(...prices), Math.max(...prices)];
+  }, [allProducts]);
+
+  // Marques dynamiques
+  const availableBrands = useMemo(() => {
+    const map = new Map<string, number>();
+    allProducts.forEach((p) => {
+      if (p.brand) map.set(p.brand, (map.get(p.brand) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([brand, count]) => ({ brand, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [allProducts]);
+
+  // Filtrage
   const products = useMemo(() => {
     let list = allProducts;
 
-    // Catégorie (bug fix : on n'inclut plus les produits sans catégorie)
     if (selectedCategory) {
       list = list.filter((p) => p.category_id === selectedCategory);
     }
-
-    // Usage tags
     if (usageFilter) {
       list = list.filter((p) =>
         (p.usage_tags || []).some(
@@ -175,18 +187,21 @@ function CatalogInner() {
         )
       );
     }
-
-    // En stock
     if (inStockOnly) {
       list = list.filter((p) => p.stock > 0);
     }
-
-    // Recherche floue locale
+    if (selectedBrands.length > 0) {
+      list = list.filter((p) => selectedBrands.includes(p.brand));
+    }
+    if (priceRange[0] > 0 || priceRange[1] > 0) {
+      list = list.filter(
+        (p) => p.price >= priceRange[0] && p.price <= priceRange[1]
+      );
+    }
     if (search) {
-      list = filterProducts(list, search, 48);
+      list = filterProducts(list, search, 100);
     }
 
-    // Tri
     const sorted = [...list];
     switch (sortBy) {
       case "popularity":
@@ -210,9 +225,35 @@ function CatalogInner() {
         break;
     }
     return sorted;
-  }, [allProducts, selectedCategory, usageFilter, inStockOnly, search, sortBy]);
+  }, [
+    allProducts,
+    selectedCategory,
+    usageFilter,
+    inStockOnly,
+    selectedBrands,
+    priceRange,
+    search,
+    sortBy,
+  ]);
 
-  // ----- Handlers -----
+  // Reset pagination
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [
+    selectedCategory,
+    usageFilter,
+    inStockOnly,
+    selectedBrands.length,
+    priceRange[0],
+    priceRange[1],
+    search,
+    sortBy,
+  ]);
+
+  const visibleProducts = products.slice(0, visibleCount);
+  const hasMore = visibleCount < products.length;
+
+  // Handlers
   const handleSearchChange = useCallback(
     (q: string) => {
       setSearch(q);
@@ -242,121 +283,68 @@ function CatalogInner() {
     updateURL({ usage: next || null });
   };
 
+  const handleBrandToggle = (brand: string) => {
+    const next = selectedBrands.includes(brand)
+      ? selectedBrands.filter((b) => b !== brand)
+      : [...selectedBrands, brand];
+    setSelectedBrands(next);
+    updateURL({ brands: next.length > 0 ? next.join(",") : null });
+  };
+
+  const handlePriceChange = (range: [number, number]) => {
+    setPriceRange(range);
+    updateURL({
+      min_price: range[0] > priceBounds[0] ? String(range[0]) : null,
+      max_price: range[1] < priceBounds[1] ? String(range[1]) : null,
+    });
+  };
+
   const resetFilters = () => {
     setSelectedCategory("");
     setInStockOnly(false);
     setUsageFilter("");
+    setSelectedBrands([]);
+    setPriceRange(priceBounds);
     setSearch("");
     setSortBy("relevance");
     router.replace("/catalog", { scroll: false });
   };
 
-  // ----- Catégorie sélectionnée (objet) -----
   const selectedCategoryObj = categories.find((c) => c.id === selectedCategory);
 
-  // ----- Nombre de filtres actifs (hors recherche et tri) -----
   const activeFiltersCount =
     (selectedCategory ? 1 : 0) +
     (inStockOnly ? 1 : 0) +
-    (usageFilter ? 1 : 0);
+    (usageFilter ? 1 : 0) +
+    selectedBrands.length +
+    (priceRange[0] > priceBounds[0] || priceRange[1] < priceBounds[1] ? 1 : 0);
 
   const hasFilters = activeFiltersCount > 0 || !!search;
 
-  // ----- Rendu de la sidebar (partagé desktop + drawer mobile) -----
-  const SidebarContent = (
-    <div className="space-y-4">
-      {/* Catégories */}
-      <div className="card p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-          Catégories
-        </h2>
-        <ul className="mt-3 space-y-1">
-          <li>
-            <button
-              type="button"
-              onClick={() => handleCategoryChange(null)}
-              className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-                !selectedCategory
-                  ? "bg-primary-50 font-medium text-primary-700 dark:bg-primary-500/15 dark:text-primary-300"
-                  : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-              }`}
-            >
-              Toutes
-            </button>
-          </li>
-          {categories.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                onClick={() => handleCategoryChange(c)}
-                className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-                  selectedCategory === c.id
-                    ? "bg-primary-50 font-medium text-primary-700 dark:bg-primary-500/15 dark:text-primary-300"
-                    : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                }`}
-              >
-                {c.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Usage */}
-      <div className="card p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-          Usage
-        </h2>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {USAGE_TAGS.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => handleUsageToggle(tag)}
-              className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition ${
-                usageFilter === tag
-                  ? "bg-primary-600 text-white dark:bg-primary-500"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              }`}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Disponibilité */}
-      <div className="card p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-          Disponibilité
-        </h2>
-        <label className="mt-3 flex cursor-pointer items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={inStockOnly}
-            onChange={(e) => handleInStockToggle(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 focus:ring-offset-0 dark:border-slate-600 dark:bg-slate-800"
-          />
-          En stock uniquement
-        </label>
-      </div>
-
-      {/* Réinitialiser */}
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={resetFilters}
-          className="w-full rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800"
-        >
-          Réinitialiser les filtres
-        </button>
-      )}
-    </div>
+  const sidebarContent = (
+    <FilterSidebar
+      categories={categories}
+      selectedCategory={selectedCategory}
+      onCategoryChange={handleCategoryChange}
+      priceRange={priceRange}
+      priceBounds={priceBounds}
+      onPriceChange={handlePriceChange}
+      selectedBrands={selectedBrands}
+      availableBrands={availableBrands}
+      onBrandToggle={handleBrandToggle}
+      usageTags={USAGE_TAGS}
+      selectedUsage={usageFilter}
+      onUsageToggle={handleUsageToggle}
+      inStockOnly={inStockOnly}
+      onInStockToggle={handleInStockToggle}
+      hasFilters={hasFilters}
+      onReset={resetFilters}
+    />
   );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* ===================== HEADER ===================== */}
+      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -366,16 +354,8 @@ function CatalogInner() {
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
             Composants PC &amp; Configurations
           </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {loading
-              ? "Chargement..."
-              : `${products.length} produit${products.length > 1 ? "s" : ""}${
-                  selectedCategoryObj ? ` dans ${selectedCategoryObj.name}` : ""
-                }`}
-          </p>
         </div>
 
-        {/* Bouton filtres (mobile) */}
         <button
           type="button"
           onClick={() => setMobileFiltersOpen(true)}
@@ -391,42 +371,27 @@ function CatalogInner() {
         </button>
       </div>
 
-      {/* ===================== LAYOUT ===================== */}
+      {/* Layout */}
       <div className="mt-6 flex gap-8">
         {/* Sidebar desktop */}
-        <aside className="hidden w-60 shrink-0 lg:block">
-          <div className="sticky top-24">{SidebarContent}</div>
+        <aside className="hidden w-64 shrink-0 lg:block">
+          <div className="sticky top-24">{sidebarContent}</div>
         </aside>
 
         {/* Contenu principal */}
         <div className="min-w-0 flex-1">
-          {/* Barre recherche + tri */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex-1">
-              <SmartSearch
-                products={allProducts}
-                navigateOnSubmit={false}
-                onSearch={handleSearchChange}
-                placeholder="Rechercher (ryzen, samsung, rtx...)"
-                defaultValue={search}
-              />
-            </div>
+          <CatalogToolbar
+            products={allProducts}
+            search={search}
+            onSearch={handleSearchChange}
+            sortBy={sortBy}
+            onSortChange={handleSortChange}
+            viewMode={viewMode}
+            onViewChange={setViewMode}
+            totalCount={products.length}
+          />
 
-            <select
-              value={sortBy}
-              onChange={(e) => handleSortChange(e.target.value as SortKey)}
-              className="input-field w-full sm:w-48"
-              aria-label="Trier par"
-            >
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Chips de filtres actifs */}
+          {/* Chips filtres actifs */}
           {hasFilters && !loading && (
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {selectedCategoryObj && (
@@ -441,6 +406,13 @@ function CatalogInner() {
                   onRemove={() => handleUsageToggle(usageFilter)}
                 />
               )}
+              {selectedBrands.map((brand) => (
+                <FilterChip
+                  key={brand}
+                  label={brand}
+                  onRemove={() => handleBrandToggle(brand)}
+                />
+              ))}
               {inStockOnly && (
                 <FilterChip
                   label="En stock"
@@ -463,12 +435,18 @@ function CatalogInner() {
             </div>
           )}
 
-          {/* Grille produits */}
+          {/* Grille ou liste */}
           <div className="mt-6">
             {loading ? (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div
+                className={
+                  viewMode === "grid"
+                    ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                    : "space-y-3"
+                }
+              >
                 {Array.from({ length: 8 }).map((_, i) => (
-                  <ProductSkeleton key={i} />
+                  <ProductSkeleton key={i} viewMode={viewMode} />
                 ))}
               </div>
             ) : products.length === 0 ? (
@@ -484,7 +462,7 @@ function CatalogInner() {
                 </h3>
                 <p className="mx-auto mt-1 max-w-xs text-sm text-slate-500 dark:text-slate-400">
                   {search
-                    ? `Aucun résultat pour « ${search} ». Essayez une autre marque ou catégorie.`
+                    ? `Aucun résultat pour « ${search} ».`
                     : "Essayez d'élargir vos filtres."}
                 </p>
                 {hasFilters && (
@@ -499,35 +477,60 @@ function CatalogInner() {
               </div>
             ) : (
               <>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                  {products.map((p) => (
-                    <ProductCard
-                      key={p.id}
-                      product={p}
-                      discounts={discounts}
-                    />
-                  ))}
-                </div>
+                {viewMode === "grid" ? (
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    {visibleProducts.map((p) => (
+                      <ProductCard
+                        key={p.id}
+                        product={p}
+                        discounts={discounts}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {visibleProducts.map((p) => (
+                      <ProductListItem
+                        key={p.id}
+                        product={p}
+                        discounts={discounts}
+                      />
+                    ))}
+                  </div>
+                )}
 
-                {/* <p className="mt-8 text-center text-xs text-slate-400 dark:text-slate-500">
-                  Prix affichés en Ariary malgache (MGA). Exemple :{" "}
-                  {formatAriary(100)} pour 100 EUR de référence.
-                </p> */}
+                {/* Charger plus */}
+                {hasMore && (
+                  <div className="mt-10 flex flex-col items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVisibleCount((c) => c + PAGE_SIZE)
+                      }
+                      className="btn-secondary inline-flex items-center gap-2"
+                    >
+                      <ChevronDownIcon size={16} />
+                      Charger {Math.min(PAGE_SIZE, products.length - visibleCount)} produits
+                      de plus
+                    </button>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      {visibleCount} sur {products.length} produits affichés
+                    </p>
+                  </div>
+                )}
               </>
             )}
           </div>
         </div>
       </div>
 
-      {/* ===================== DRAWER MOBILE ===================== */}
+      {/* Drawer mobile */}
       {mobileFiltersOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileFiltersOpen(false)}
           />
-          {/* Drawer */}
           <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl dark:bg-slate-900">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
@@ -543,7 +546,7 @@ function CatalogInner() {
               </button>
             </div>
 
-            {SidebarContent}
+            {sidebarContent}
 
             <button
               type="button"
@@ -558,10 +561,6 @@ function CatalogInner() {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Sous-composants
-// ---------------------------------------------------------------------------
 
 function FilterChip({
   label,
@@ -585,7 +584,20 @@ function FilterChip({
   );
 }
 
-function ProductSkeleton() {
+function ProductSkeleton({ viewMode }: { viewMode: ViewMode }) {
+  if (viewMode === "list") {
+    return (
+      <div className="card flex gap-4 p-4">
+        <div className="h-32 w-32 shrink-0 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+        <div className="flex-1 space-y-3">
+          <div className="h-3 w-16 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+          <div className="h-5 w-3/4 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+          <div className="h-4 w-1/2 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+          <div className="h-9 w-32 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="card overflow-hidden">
       <div className="aspect-[4/3] animate-pulse bg-slate-100 dark:bg-slate-800" />
@@ -598,10 +610,6 @@ function ProductSkeleton() {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Export
-// ---------------------------------------------------------------------------
 
 export default function CatalogPage() {
   return (

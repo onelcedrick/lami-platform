@@ -101,8 +101,11 @@ func (s *CatalogService) ListProducts(ctx context.Context, filter shareddomain.P
 	if filter.Page < 1 {
 		filter.Page = 1
 	}
-	if filter.Limit < 1 || filter.Limit > 100 {
+	if filter.Limit < 1 {
 		filter.Limit = 20
+	}
+	if filter.Limit > 1000 {
+		filter.Limit = 1000
 	}
 	if filter.SortBy == "popularity" || filter.SortBy == "popularity_score" {
 		return s.listPopularPaged(ctx, filter)
@@ -523,11 +526,25 @@ func (s *CatalogService) BulkCreateProducts(ctx context.Context, reqs []shareddo
 	if len(reqs) == 0 {
 		return result, errors.New("aucun produit a importer")
 	}
-	if len(reqs) > 500 {
-		return nil, errors.New("maximum 500 produits par import")
+	if len(reqs) > 5000 {
+		return nil, errors.New("maximum 5000 produits par import")
 	}
 
-	// Resolve category by name if needed later is done client-side
+	// Cache des SKUs existants (pour éviter les doublons)
+	existing, _ := s.productRepo.FindBySKUs(ctx, func() []string {
+		skus := make([]string, 0, len(reqs))
+		for _, r := range reqs {
+			if r.SKU != "" {
+				skus = append(skus, r.SKU)
+			}
+		}
+		return skus
+	}())
+	existingSet := make(map[string]bool, len(existing))
+	for _, p := range existing {
+		existingSet[p.SKU] = true
+	}
+
 	for i, req := range reqs {
 		if req.Name == "" || req.SKU == "" || req.CategoryID == "" || req.Price <= 0 {
 			result.Failed++
@@ -537,18 +554,24 @@ func (s *CatalogService) BulkCreateProducts(ctx context.Context, reqs []shareddo
 		if req.Brand == "" {
 			req.Brand = "Generic"
 		}
+		// Ignore les SKUs déjà existants
+		if existingSet[req.SKU] {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("ligne %d (%s): SKU deja existant (ignore)", i+1, req.SKU))
+			continue
+		}
 		p, err := s.CreateProduct(ctx, req)
 		if err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, fmt.Sprintf("ligne %d (%s): %s", i+1, req.SKU, err.Error()))
 			continue
 		}
+		existingSet[p.SKU] = true
 		result.Created++
 		result.IDs = append(result.IDs, p.ID)
 	}
 	return result, nil
 }
-
 // FindCategoryIDByName cherche une categorie par nom (insensible a la casse)
 func (s *CatalogService) FindCategoryIDByName(ctx context.Context, name string) (string, error) {
 	cats, err := s.categoryRepo.List(ctx)

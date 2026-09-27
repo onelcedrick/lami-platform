@@ -405,3 +405,19 @@ func (r *MongoDiscountRepository) ListActive(ctx context.Context) ([]shareddomai
 	}
 	return list, nil
 }
+func (r *MongoProductRepository) FindBySKUs(ctx context.Context, skus []string) ([]*shareddomain.Product, error) {
+	if len(skus) == 0 {
+		return nil, nil
+	}
+	cursor, err := r.collection.Find(ctx, bson.M{"sku": bson.M{"$in": skus}})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var products []*shareddomain.Product
+	if err := cursor.All(ctx, &products); err != nil {
+		return nil, err
+	}
+	return products, nil
+}

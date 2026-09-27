@@ -120,12 +120,12 @@ class ChatHistoryService:
         docs = await cursor.to_list(length=limit)
         return [
             ConversationSummary(
-                id=d["_id"],
-                title=d.get("title", "Sans titre"),
-                mode=d.get("mode", "auto"),
-                message_count=d.get("message_count", 0),
-                last_message_at=d.get("last_message_at"),
-                created_at=d.get("created_at"),
+                id=str(d.get("id") or d["_id"]),
+                title=d.get("title") or "Sans titre",
+                mode=d.get("mode") or "auto",
+                message_count=int(d.get("message_count") or 0),
+                last_message_at=d.get("last_message_at") or d.get("created_at"),
+                created_at=d.get("created_at") or d.get("last_message_at"),
             )
             for d in docs
         ]

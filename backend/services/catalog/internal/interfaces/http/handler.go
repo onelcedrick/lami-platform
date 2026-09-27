@@ -166,7 +166,6 @@ func (h *CatalogHandler) RecordSale(c *fiber.Ctx) error {
 	}
 	return response.Success(c, fiber.StatusOK, "Vente enregistree", nil)
 }
-
 func (h *CatalogHandler) BulkCreateProducts(c *fiber.Ctx) error {
 	var body struct {
 		Products []shareddomain.CreateProductRequest `json:"products"`
@@ -178,12 +177,24 @@ func (h *CatalogHandler) BulkCreateProducts(c *fiber.Ctx) error {
 		return response.ValidationError(c, "Aucun produit fourni")
 	}
 
+	// Résolution + création auto des catégories
 	for i := range body.Products {
 		cid := body.Products[i].CategoryID
-		if cid != "" && len(cid) < 40 {
-			if id, err := h.service.FindCategoryIDByName(c.Context(), cid); err == nil {
-				body.Products[i].CategoryID = id
-			}
+		if cid == "" || len(cid) >= 40 {
+			continue
+		}
+		// Tenter de résoudre par nom
+		if id, err := h.service.FindCategoryIDByName(c.Context(), cid); err == nil {
+			body.Products[i].CategoryID = id
+			continue
+		}
+		// Sinon créer la catégorie
+		cat, err := h.service.CreateCategory(c.Context(), cid, "", nil)
+		if err == nil {
+			body.Products[i].CategoryID = cat.ID
+		} else {
+			return response.Error(c, fiber.StatusBadRequest,
+				"Catégorie inconnue et création échouée: "+cid)
 		}
 	}
 

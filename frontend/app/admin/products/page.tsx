@@ -162,7 +162,7 @@ export default function AdminProductsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = { limit: 100 };
+      const params: Record<string, string | number> = { limit: 1000 };
       if (search) params.search = search;
       if (categoryFilter) params.category_id = categoryFilter;
 

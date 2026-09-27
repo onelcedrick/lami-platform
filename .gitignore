@@ -59,3 +59,11 @@ backend/bin/
 .env
 services/ia/.env
 .env
+
+# Images publiques (générées localement, trop volumineuses)
+frontend/public/images/
+
+# Backups
+*.bak
+*.bak2
+*.bak.*

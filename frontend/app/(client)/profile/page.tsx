@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
+import Avatar from "@/components/ui/Avatar";
 
 interface GeoRegion {
   code: string;
@@ -152,13 +153,22 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          Mon profil
-        </h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
-          Informations personnelles et adresse de livraison (Madagascar)
-        </p>
+            <div className="flex items-center gap-4">
+        <Avatar
+          firstName={form.first_name || profile?.first_name}
+          lastName={form.last_name || profile?.last_name}
+          email={profile?.email}
+          size="xl"
+          ring
+        />
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            {form.first_name} {form.last_name}
+          </h1>
+          <p className="mt-1 text-slate-600 dark:text-slate-400">
+            {profile?.email}
+          </p>
+        </div>
       </div>
 
       {message && (

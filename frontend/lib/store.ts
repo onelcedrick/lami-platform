@@ -20,6 +20,7 @@ export interface User {
   last_name: string;
   role: string;
   phone?: string;
+  avatar_url?: string | null;  
 }
 
 interface AuthState {

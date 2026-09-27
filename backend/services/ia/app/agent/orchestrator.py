@@ -11,56 +11,50 @@ from uuid import uuid4
 from app.agent.llm import get_llm_client
 from app.agent.tools import get_tool_registry
 from app.core.config import get_settings
-from app.domain.models import ChatResponse, SourceDocument, ToolCallResult
+from app.domain.models import (
+    ChatResponse,
+    ProductCard,
+    SourceDocument,
+    ToolCallResult,
+)
 from app.rag.pipeline import get_rag_pipeline
 
 
 # Mots-cles pour le routage
 SUPPORT_KEYWORDS = [
-    "panne",
-    "erreur",
-    "ecran bleu",
-    "bsod",
-    "ne demarre",
-    "surchauffe",
-    "driver",
-    "bios",
-    "comment",
-    "probleme",
-    "bug",
-    "diagnostic",
-    "reparer",
-    "installer",
-    "pilote",
-    "overheating",
-    "pas de signal",
+    "panne", "erreur", "ecran bleu", "bsod", "ne demarre", "surchauffe",
+    "driver", "bios", "comment", "probleme", "bug", "diagnostic",
+    "reparer", "installer", "pilote", "overheating", "pas de signal",
 ]
 
 COMMERCE_KEYWORDS = [
-    "acheter",
-    "prix",
-    "budget",
-    "recommande",
-    "configuration",
-    "configurer",
-    "pc pour",
-    "carte graphique",
-    "processeur",
-    "meilleur",
-    "combien",
-    "disponible",
-    "stock",
-    "commander",
-    "produit",
-    "gaming",
-    "montage video",
-    "compar",
-    "panier",
-    "ariary",
-    " millions",
-    "ajoute",
-    "composant",
+    "acheter", "prix", "budget", "recommande", "configuration", "configurer",
+    "pc pour", "carte graphique", "processeur", "meilleur", "combien",
+    "disponible", "stock", "commander", "produit", "gaming", "montage video",
+    "compar", "panier", "ariary", " millions", "ajoute", "composant",
 ]
+
+# ✅ Mapping mot-clé → catégorie pour la recherche
+CATEGORY_MAP = {
+    "cpu": "CPU",
+    "processeur": "CPU",
+    "gpu": "GPU",
+    "carte graphique": "GPU",
+    "ram": "RAM",
+    "memoire": "RAM",
+    "ssd": "Stockage",
+    "nvme": "Stockage",
+    "hdd": "Stockage",
+    "disque dur": "Stockage",
+    "stockage": "Stockage",
+    "alimentation": "Alimentation",
+    "psu": "Alimentation",
+    "carte mere": "Carte mere",
+    "motherboard": "Carte mere",
+    "boitier": "Boitier",
+    "ventirad": "Refroidissement",
+    "ventilateur": "Refroidissement",
+}
 
 
 # Memoire conversation (pending config PC)
@@ -106,30 +100,23 @@ class AgentOrchestrator:
             "ajoute", "ajouter", "panier", "vas-y", "valide", "validé",
             "je veux", "go", "confirme", "accepte", "yes",
         )
-        reject_words = (
-            "non", "pas maintenant", "plus tard", "refuse", "annule",
-        )
+        reject_words = ("non", "pas maintenant", "plus tard", "refuse", "annule")
+
         pending = session.get("pending_build")
         if pending and any(w in lower for w in accept_words):
-            # Si le client parle encore de budget, ce n'est pas une simple acceptation
             if not re.search(r"\d{4,}", lower.replace(" ", "")):
                 calls.append(("add_build_to_cart", {"build": pending}))
                 return calls
         if pending and any(w in lower for w in reject_words) and len(lower) < 40:
             session.pop("pending_build", None)
             session["last_reject"] = True
-            return calls  # pas d'outil — reponse texte
+            return calls
 
         # Budget Ar / EUR / millions
         budget_match = re.search(
-            r"(\d[\d\s.,]*)\s*(ar|ariary|mga|€|euros?|eur)?",
-            lower,
+            r"(\d[\d\s.,]*)\s*(ar|ariary|mga|€|euros?|eur)?", lower,
         )
-        # aussi "3 millions" / "3.5 millions"
-        millions = re.search(
-            r"(\d+[.,]?\d*)\s*millions?",
-            lower,
-        )
+        millions = re.search(r"(\d+[.,]?\d*)\s*millions?", lower)
         usage = None
         for u in ("gaming", "bureautique", "montage video", "montage", "creation"):
             if u in lower:
@@ -147,57 +134,68 @@ class AgentOrchestrator:
                 budget = None
             unit = (budget_match.group(2) or "").lower()
             if budget and unit in ("€", "euro", "euros", "eur"):
-                budget = budget * 4500  # approx vers MGA
+                budget = budget * 4500
 
+        # ✅ Détection améliorée des configs (ajout de "setup", "monter", "monte")
         wants_config = any(
             w in lower
             for w in (
                 "config", "configuration", "configurer", "pc pour",
                 "montage", "gaming", "bureautique", "assemble", "build",
+                "setup", "monter", "monte",
             )
         )
-        if budget and budget >= 100000 and (usage or wants_config or "pc" in lower):
-            calls.append(
-                (
+
+        # ✅ Détecter "setup" / "monter" avec budget
+        if budget and budget >= 100000:
+            if wants_config or usage or "pc" in lower or "setup" in lower or "monter" in lower:
+                calls.append((
                     "suggest_pc_build",
                     {"usage": usage or "gaming", "budget": budget},
-                )
-            )
-            return calls
-        if budget and budget >= 100000 and "budget" in lower:
-            calls.append(
-                (
+                ))
+                return calls
+            # Budget seul
+            if "budget" in lower:
+                calls.append((
                     "suggest_pc_build",
                     {"usage": usage or "gaming", "budget": budget},
-                )
-            )
-            return calls
+                ))
+                return calls
 
         if any(w in lower for w in ("categorie", "categories", "rayon")):
             calls.append(("list_categories", {}))
 
+        # ✅ Détection de catégorie (CPU, GPU, RAM, SSD, etc.)
+        for keyword, category in CATEGORY_MAP.items():
+            if keyword in lower:
+                calls.append((
+                    "search_products",
+                    {"category": category, "limit": 10},
+                ))
+                return calls
+
+        # ✅ "autre produit", "similaire", "comme ça"
+        if any(w in lower for w in ("similaire", "comme ça", "autre produit", "autre option")):
+            last_cat = session.get("last_category")
+            if last_cat:
+                calls.append((
+                    "search_products",
+                    {"category": last_cat, "limit": 5},
+                ))
+                return calls
+
         if any(
             w in lower
             for w in (
-                "cherche",
-                "recherche",
-                "trouve",
-                "montre",
-                "prix",
-                "rtx",
-                "ryzen",
-                "intel",
-                "nvidia",
-                "ram",
-                "ssd",
+                "cherche", "recherche", "trouve", "montre", "prix",
+                "rtx", "ryzen", "intel", "nvidia",
             )
         ):
-            # Extraire une requete simple
             search = message
             for prefix in ("cherche", "recherche", "trouve-moi", "montre-moi", "je veux"):
                 if prefix in lower:
                     idx = lower.find(prefix)
-                    search = message[idx + len(prefix) :].strip(" :," )
+                    search = message[idx + len(prefix):].strip(" :,")
                     break
             args: dict[str, Any] = {"search": search[:100], "limit": 5}
             price = re.search(r"(\d[\d\s]*)\s*(€|euros?)", lower)
@@ -206,17 +204,15 @@ class AgentOrchestrator:
             calls.append(("search_products", args))
 
         if any(w in lower for w in ("creer un ticket", "ouvrir un ticket", "ticket support")):
-            calls.append(
-                (
-                    "create_support_ticket",
-                    {
-                        "title": message[:80],
-                        "description": message,
-                        "category": "materiel",
-                        "priority": "medium",
-                    },
-                )
-            )
+            calls.append((
+                "create_support_ticket",
+                {
+                    "title": message[:80],
+                    "description": message,
+                    "category": "materiel",
+                    "priority": "medium",
+                },
+            ))
 
         return calls
 
@@ -231,7 +227,7 @@ class AgentOrchestrator:
         start = time.perf_counter()
         conv_id = conversation_id or str(uuid4())
         detected = self.detect_mode(message, mode)
-        # Si une config est en attente de confirmation, forcer mode commerce
+
         sess = self._session(conv_id)
         if sess.get("pending_build") and mode == "auto":
             lower = message.lower()
@@ -255,7 +251,6 @@ class AgentOrchestrator:
                 message, conv_id=conv_id, auth_token=auth_token, user_id=user_id
             )
         else:
-            # General : essayer tools puis fallback LLM
             intents = self._extract_tool_intents(message, conv_id)
             if not intents and self._session(conv_id).pop("last_reject", None):
                 reply = (
@@ -270,12 +265,60 @@ class AgentOrchestrator:
                 reply = await self.llm.generate(
                     message,
                     system=(
-                        "Tu es l'assistant conversationnel de L'AMI, "
-                        "plateforme e-commerce et support technique PC. "
-                        "Reponds en francais, de maniere professionnelle et concise. "
-                        "Pour une config PC, demande usage et budget en Ariary."
+                        "Tu es l'assistant L'AMI, plateforme e-commerce PC a Madagascar. "
+                        "REGLES STRICTES :\n"
+                        "1. Reponds en 2 phrases MAXIMUM. Pas de tableau, pas de liste longue.\n"
+                        "2. Si le client cherche un produit ou un PC, propose des produits "
+                        "du catalogue (pas de conseils generiques).\n"
+                        "3. Ton direct et utile. Pas de 'Bonjour', pas de 'Je comprends'.\n"
+                        "4. Prix en Ariary (Ar), format court : 2 300 000 Ar.\n"
+                        "5. Si tu ne sais pas, propose de chercher dans le catalogue."
                     ),
                 )
+
+        # ✅ Extraire les produits des tool_calls pour le frontend (avec fallback)
+        products_for_ui: list[ProductCard] = []
+        try:
+            for tr in tool_results:
+                if tr.name == "search_products" and isinstance(tr.result, dict):
+                    for p in tr.result.get("products", [])[:3]:
+                        try:
+                            products_for_ui.append(
+                                ProductCard(
+                                    id=str(p.get("id") or ""),
+                                    name=str(p.get("name") or ""),
+                                    brand=str(p.get("brand") or ""),
+                                    price=float(p.get("price") or 0),
+                                    stock=int(p.get("stock") or 0),
+                                    image=p.get("image") if p.get("image") else None,
+                                    slug=p.get("slug") if p.get("slug") else None,
+                                    rating=float(p["rating"]) if p.get("rating") else None,
+                                )
+                            )
+                        except Exception as e:
+                            print(f"[orchestrator] skip product: {e}")
+                            continue
+                if tr.name == "add_to_cart" and isinstance(tr.result, dict):
+                    for it in tr.result.get("items", []):
+                        try:
+                            products_for_ui.append(
+                                ProductCard(
+                                    id=str(it.get("product_id") or ""),
+                                    name=str(it.get("name") or ""),
+                                    brand="",
+                                    price=float(it.get("price") or 0),
+                                    stock=0,
+                                    image=it.get("image") if it.get("image") else None,
+                                    slug=None,
+                                    rating=None,
+                                )
+                            )
+                        except Exception as e:
+                            print(f"[orchestrator] skip cart item: {e}")
+                            continue
+        except Exception as e:
+            print(f"[orchestrator] products_for_ui error: {e}")
+            products_for_ui = []
 
         latency = int((time.perf_counter() - start) * 1000)
         return ChatResponse(
@@ -284,6 +327,7 @@ class AgentOrchestrator:
             mode=detected,
             sources=sources,
             tool_calls=tool_results,
+            products=products_for_ui,
             latency_ms=latency,
         )
 
@@ -297,8 +341,11 @@ class AgentOrchestrator:
         reply = await self.llm.generate(
             prompt,
             system=(
-                "Assistant technique L'AMI. Reponses en francais, "
-                "basees sur le contexte fourni uniquement."
+                "Tu es l'assistant technique L'AMI. "
+                "Reponds en 2 phrases maximum, en francais. "
+                "Base-toi uniquement sur le contexte fourni. "
+                "Pas de tableau, pas de liste longue. "
+                "Si tu ne sais pas, propose de creer un ticket support."
             ),
         )
         return reply, sources
@@ -319,7 +366,29 @@ class AgentOrchestrator:
                     "Donnez un autre budget ou usage pour une nouvelle config.",
                     [],
                 )
-            intents = [("search_products", {"search": message[:80], "limit": 5})]
+
+            # ✅ Extraire un terme court (pas toute la phrase)
+            lower = message.lower()
+            search_term = ""
+
+            # Priorité : usage détecté
+            for u in ("gaming", "bureautique", "creation", "streaming", "montage"):
+                if u in lower:
+                    search_term = u
+                    break
+
+            # Sinon : 2 premiers mots significatifs
+            if not search_term:
+                words = [
+                    w for w in re.split(r"[\s,.;:!?]+", message)
+                    if len(w) > 2 and w.lower() not in (
+                        "pour", "avec", "dans", "les", "des", "une", "un",
+                    )
+                ]
+                search_term = " ".join(words[:2]) if words else message[:30]
+
+            intents = [("search_products", {"search": search_term, "limit": 5})]
+
         return await self._run_tools(
             intents, message, conv_id=conv_id, auth_token=auth_token, user_id=user_id
         )
@@ -337,7 +406,6 @@ class AgentOrchestrator:
         session = self._session(conv_id) if conv_id else {}
 
         for name, args in intents:
-            # Outil virtuel: ajouter la derniere config au panier
             if name == "add_build_to_cart":
                 build = args.get("build") or session.get("pending_build") or {}
                 comps = build.get("components") or build.get("suggested_components") or []
@@ -368,28 +436,39 @@ class AgentOrchestrator:
             raw = await self.tools.execute(
                 name, args, auth_token=auth_token, user_id=user_id
             )
-            # Memoriser la config proposee pour confirmation client
             if name == "suggest_pc_build" and isinstance(raw, dict) and not raw.get("error"):
                 session["pending_build"] = raw
-            results.append(
-                ToolCallResult(name=name, arguments=args, result=raw)
-            )
+
+            # ✅ Mémoriser la catégorie pour "autre produit similaire"
+            if name == "search_products" and isinstance(raw, dict):
+                args_cat = args.get("category")
+                if args_cat:
+                    session["last_category"] = args_cat
+
+            results.append(ToolCallResult(name=name, arguments=args, result=raw))
             summaries.append(self._summarize_tool(name, raw))
 
-        # Config / panier : reponse structuree (ne pas laisser le LLM effacer la question)
+        # ✅ search_products : toujours répondre SANS le LLM (pour garder les vrais prix)
+        if any(n == "search_products" for n, _ in intents):
+            reply = "\n\n".join(summaries)
+            return reply, results
+
+        # Config / panier : réponse structurée
         if any(n in ("suggest_pc_build", "add_build_to_cart", "add_to_cart") for n, _ in intents) or any(
             r.name == "add_to_cart" for r in results
         ):
             reply = "\n\n".join(summaries)
             return reply, results
 
+        # Fallback LLM (cas général seulement)
         tools_context = "\n".join(summaries)
         prompt = (
             f"Message client : {original_message}\n\n"
-            f"Resultats des outils :\n{tools_context}\n\n"
-            "Redige une reponse claire et utile en francais pour le client, "
-            "en te basant sur ces resultats. Ne mentionne pas les outils techniques. "
-            "Prix en Ariary (Ar)."
+            f"Resultats :\n{tools_context}\n\n"
+            "Redige une reponse TRES COURTE (2 phrases max) en francais. "
+            "Pas de 'Bonjour', pas de 'Je comprends', pas de tableau. "
+            "Prix en Ariary. Si des produits sont trouves, cite-les brievement. "
+            "Si aucun produit, propose de chercher autre chose."
         )
         reply = await self.llm.generate(prompt)
         return reply, results
@@ -401,15 +480,36 @@ class AgentOrchestrator:
         if raw.get("error"):
             return f"{name}: erreur - {raw['error']}"
 
+        # ✅ Affichage structuré avec vrais prix + stock
         if name == "search_products":
             products = raw.get("products", [])
             if not products:
-                return "search_products: aucun produit trouve"
-            lines = [
-                f"- {p.get('name')} ({p.get('brand')}) : {p.get('price')} Ar, stock {p.get('stock')}"
-                for p in products
-            ]
-            return "Produits trouves:\n" + "\n".join(lines)
+                return "Aucun produit trouve dans le catalogue. Essayez un autre terme."
+            count = len(products)
+
+            lines = []
+            for p in products[:5]:
+                name_p = p.get("name", "?")
+                brand = p.get("brand", "")
+                price = p.get("price") or 0
+                stock = p.get("stock") or 0
+
+                line = f"- {name_p}"
+                if brand:
+                    line += f" ({brand})"
+                line += f" : {price:,.0f} Ar".replace(",", " ")
+                if stock > 0:
+                    line += f", {stock} en stock"
+                lines.append(line)
+
+            suffix = ""
+            if count > 5:
+                rest = count - 5
+                rest_plural = "s" if rest > 1 else ""
+                suffix = f"\n\n(+{rest} autre{rest_plural} produit{rest_plural})"
+
+            header = f"J'ai trouve {count} produit{'s' if count > 1 else ''} :"
+            return header + "\n" + "\n".join(lines) + suffix
 
         if name == "suggest_pc_build":
             comps = raw.get("suggested_components") or raw.get("components") or []
@@ -423,7 +523,8 @@ class AgentOrchestrator:
             total = raw.get("estimated_total", 0)
             budget = raw.get("budget", 0)
             return (
-                f"Voici une configuration {raw.get('usage')} pour un budget de {budget:,.0f} Ar :\n".replace(",", " ")
+                f"Voici une configuration {raw.get('usage')} pour un budget de "
+                f"{budget:,.0f} Ar :\n".replace(",", " ")
                 + "\n".join(lines)
                 + f"\n\nTotal estime : {total:,.0f} Ar.".replace(",", " ")
                 + "\n\nSouhaitez-vous que j'ajoute ces composants dans votre panier ?"

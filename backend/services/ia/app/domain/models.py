@@ -50,12 +50,25 @@ class ToolCallResult(BaseModel):
     result: Any
 
 
+class ProductCard(BaseModel):
+    """Produit à afficher en card dans le chat."""
+    id: str
+    name: str
+    brand: str
+    price: float
+    stock: int
+    image: Optional[str] = None
+    slug: Optional[str] = None
+    rating: Optional[float] = None
+
+
 class ChatResponse(BaseModel):
     conversation_id: str
     reply: str
     mode: str
     sources: list[SourceDocument] = []
     tool_calls: list[ToolCallResult] = []
+    products: list[ProductCard] = []   # ✅ AJOUT
     latency_ms: int = 0
 
 

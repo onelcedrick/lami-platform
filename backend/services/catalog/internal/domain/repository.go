@@ -20,6 +20,7 @@ type ProductRepository interface {
 	DecrementStock(ctx context.Context, id string, qty int) error
 	IncrementStock(ctx context.Context, id string, qty int) error
 	ListByPopularity(ctx context.Context, limit int) ([]shareddomain.Product, error)
+	FindBySKUs(ctx context.Context, skus []string) ([]*shareddomain.Product, error)
 }
 
 type CategoryRepository interface {
