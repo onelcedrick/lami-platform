@@ -71,6 +71,10 @@ func NewUserService(repo domain.UserRepository) *UserService {
 	return &UserService{repo: repo}
 }
 
+// ---------------------------------------------------------------------------
+// Profil
+// ---------------------------------------------------------------------------
+
 func (s *UserService) GetProfile(ctx context.Context, userID string) (*shareddomain.User, error) {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -124,6 +128,25 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, req shar
 	user.PasswordHash = ""
 	return user, nil
 }
+
+// UpdateAvatar met à jour l'URL de l'avatar. Passer une chaîne vide pour supprimer.
+func (s *UserService) UpdateAvatar(ctx context.Context, userID, avatarURL string) (*shareddomain.User, error) {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	user.AvatarURL = avatarURL
+	user.UpdatedAt = time.Now().UTC()
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	user.PasswordHash = ""
+	return user, nil
+}
+
+// ---------------------------------------------------------------------------
+// Admin — Utilisateurs
+// ---------------------------------------------------------------------------
 
 func (s *UserService) ListUsers(ctx context.Context, page, limit int, role, search string, activeOnly *bool) ([]shareddomain.User, int64, error) {
 	if page < 1 {
@@ -208,6 +231,10 @@ func (s *UserService) ListRegions() []shareddomain.GeoRegion {
 	return MadagascarRegions
 }
 
+// ---------------------------------------------------------------------------
+// Panier
+// ---------------------------------------------------------------------------
+
 func (s *UserService) GetCart(ctx context.Context, userID string) ([]shareddomain.UserCartItem, error) {
 	u, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -235,6 +262,10 @@ func (s *UserService) SaveCart(ctx context.Context, userID string, items []share
 	return u.Cart, nil
 }
 
+// ---------------------------------------------------------------------------
+// Favoris
+// ---------------------------------------------------------------------------
+
 func (s *UserService) GetFavorites(ctx context.Context, userID string) ([]shareddomain.UserFavoriteItem, error) {
 	u, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -261,6 +292,10 @@ func (s *UserService) SaveFavorites(ctx context.Context, userID string, items []
 	}
 	return u.Favorites, nil
 }
+
+// ---------------------------------------------------------------------------
+// Paramètres boutique
+// ---------------------------------------------------------------------------
 
 func (s *UserService) GetShopSettings(ctx context.Context) (*shareddomain.ShopSettings, error) {
 	st, err := s.repo.GetSettings(ctx)

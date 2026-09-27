@@ -1,0 +1,1 @@
+"""Package d'évaluation du Golden Set L'AMI."""

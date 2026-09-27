@@ -71,8 +71,17 @@ services:
       MONGO_DB: lami_auth
       JWT_SECRET: lami-super-secret-key-change-in-production-2026
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # ✅ AJOUT — Object store MinIO pour les avatars
+      STORAGE_DRIVER: minio
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: lami
+      MINIO_SECRET_KEY: lami_secret_minio
+      MINIO_BUCKET: lami-uploads
+      MINIO_USE_SSL: "false"
+      MINIO_PUBLIC_URL: http://localhost:9000/lami-uploads
     depends_on:
       - mongodb
+      - minio
     networks:
       - lami-network
     restart: unless-stopped
@@ -265,7 +274,7 @@ services:
     restart: unless-stopped
 
   # ============================================================
-  # IA SERVICE — Groq + sentence-transformers (vrai modèle)
+  # IA SERVICE — Groq + sentence-transformers
   # ============================================================
   ia-service:
     build:
@@ -281,19 +290,16 @@ services:
       MONGO_DB: lami_ia
       JWT_SECRET: lami-super-secret-key-change-in-production-2026
 
-      # ===== LLM — Groq (OpenAI-compatible) =====
+      # ===== LLM — Groq =====
       LLM_PROVIDER: openai_compatible
       OPENAI_API_KEY: ${GROQ_API_KEY}
       OPENAI_BASE_URL: https://api.groq.com/openai/v1
-      OPENAI_MODEL: ${OPENAI_MODEL}
+      OPENAI_MODEL: llama-3.3-70b-versatile
 
-      # ===== Embeddings — vrai modèle =====
-      # Modèle pré-téléchargé → pas besoin de timeout
-      # Décommenter UNIQUEMENT si tu veux forcer le hash (démo rapide)
-      # EMBEDDINGS_BACKEND: hash
+      # ===== Embeddings =====
       EMBEDDINGS_LOAD_TIMEOUT: "60"
 
-      # ===== Microservices (Function Calling) =====
+      # ===== Microservices =====
       CATALOG_SERVICE_URL: http://catalog-service:8083
       ORDER_SERVICE_URL: http://order-service:8084
       TICKET_SERVICE_URL: http://ticket-service:8085

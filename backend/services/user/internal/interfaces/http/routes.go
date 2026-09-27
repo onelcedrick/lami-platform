@@ -15,6 +15,8 @@ func SetupRoutes(app *fiber.App, handler *UserHandler, jwtSecret string) {
 	protected := api.Group("", middleware.AuthRequired(jwtSecret))
 	protected.Get("/me", handler.GetProfile)
 	protected.Put("/me", handler.UpdateProfile)
+	protected.Post("/me/avatar", handler.UploadAvatar)
+	protected.Delete("/me/avatar", handler.DeleteAvatar)
 	protected.Get("/me/cart", handler.GetCart)
 	protected.Put("/me/cart", handler.SaveCart)
 	protected.Get("/me/favorites", handler.GetFavorites)

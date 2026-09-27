@@ -14,6 +14,7 @@ import (
 	"github.com/lami-platform/shared/pkg/logger"
 	"github.com/lami-platform/shared/pkg/middleware"
 	"github.com/lami-platform/shared/pkg/mongodb"
+	"github.com/lami-platform/shared/pkg/storage"
 	"github.com/lami-platform/services/user/internal/application"
 	"github.com/lami-platform/services/user/internal/infrastructure"
 	httpHandler "github.com/lami-platform/services/user/internal/interfaces/http"
@@ -39,7 +40,15 @@ func main() {
 	// En dev, on peut pointer MONGO_DB=lami_auth pour unifier.
 	repo := infrastructure.NewMongoUserRepository(mongoClient)
 	service := application.NewUserService(repo)
-	handler := httpHandler.NewUserHandler(service)
+
+	// ✅ Object store pour les avatars (local ou MinIO)
+	store, err := storage.NewFromEnv()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Impossible d'initialiser l'object store")
+	}
+	logger.Info().Msg("Object store initialise")
+
+	handler := httpHandler.NewUserHandler(service, store)
 
 	app := fiber.New(fiber.Config{
 		AppName:      "L'AMI User Service",
