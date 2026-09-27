@@ -46,6 +46,19 @@ function qs(params?: Record<string, string | number | boolean | undefined>) {
   return "?" + new URLSearchParams(entries).toString();
 }
 
+/**
+ * Retourne un header X-Session-Id pour les utilisateurs anonymes.
+ */
+function getSessionHeader(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  let sid = localStorage.getItem("lami-ia-session");
+  if (!sid) {
+    sid = `anon-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    localStorage.setItem("lami-ia-session", sid);
+  }
+  return { "X-Session-Id": sid };
+}
+
 export const api = {
   // -------------------------------------------------------------------------
   // Auth
@@ -107,8 +120,7 @@ export const api = {
     request("/api/v1/catalog/seed", { method: "POST" }),
 
   // -------------------------------------------------------------------------
-  // Catalog — Upload d'images produit
-  // (utilise fetch direct car FormData ne doit PAS avoir de Content-Type forcé)
+  // Catalog — Upload d'images
   // -------------------------------------------------------------------------
   uploadProductImage: async (file: File) => {
     const token =
@@ -196,10 +208,6 @@ export const api = {
   getInvoicePDFUrl: (id: string) =>
     `${API_BASE}/api/v1/orders/${id}/invoice.pdf`,
 
-  /**
-   * Télécharge la facture PDF via fetch authentifié.
-   * (getInvoicePDFUrl ne porte pas le token → à utiliser avec fetch ici)
-   */
   downloadInvoicePDF: async (id: string, filename = "facture.pdf") => {
     const token =
       typeof window !== "undefined"
@@ -311,10 +319,14 @@ export const api = {
     request("/api/v1/notifications/read-all", { method: "POST" }),
 
   // -------------------------------------------------------------------------
-  // IA
+  // IA — Chat
   // -------------------------------------------------------------------------
   iaChat: (body: { message: string; conversation_id?: string; mode?: string }) =>
-    request("/api/v1/ia/chat", { method: "POST", body: JSON.stringify(body) }),
+    request("/api/v1/ia/chat", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: getSessionHeader(),
+    }),
 
   iaHealth: () => request("/api/v1/ia/health"),
 
@@ -325,11 +337,67 @@ export const api = {
     }),
 
   // -------------------------------------------------------------------------
+  // IA — Historique de chat
+  // -------------------------------------------------------------------------
+  listConversations: () =>
+    request("/api/v1/ia/conversations", {
+      headers: getSessionHeader(),
+    }),
+
+  getConversation: (id: string) =>
+    request(`/api/v1/ia/conversations/${id}`, {
+      headers: getSessionHeader(),
+    }),
+
+  renameConversation: (id: string, title: string) =>
+    request(`/api/v1/ia/conversations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+      headers: getSessionHeader(),
+    }),
+
+  deleteConversation: (id: string) =>
+    request(`/api/v1/ia/conversations/${id}`, {
+      method: "DELETE",
+      headers: getSessionHeader(),
+    }),
+
+  // -------------------------------------------------------------------------
   // Users / Profile
   // -------------------------------------------------------------------------
   getProfile: () => request("/api/v1/users/me"),
   updateProfile: (body: unknown) =>
     request("/api/v1/users/me", { method: "PUT", body: JSON.stringify(body) }),
+
+  /**
+   * Upload l'avatar de l'utilisateur connecté.
+   * Utilise fetch direct car FormData (pas de Content-Type JSON).
+   */
+  uploadAvatar: async (file: File) => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${API_BASE}/api/v1/users/me/avatar`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    return (await res.json()) as ApiResponse<{
+      avatar_url: string;
+      url: string;
+      key: string;
+    }>;
+  },
+
+  /**
+   * Supprime l'avatar (revient aux initiales).
+   */
+  deleteAvatar: () =>
+    request<{ avatar_url: string }>("/api/v1/users/me/avatar", {
+      method: "DELETE",
+    }),
+
   listUsers: (params?: Record<string, string | number | undefined>) =>
     request(`/api/v1/users${qs(params as any)}`),
   userStats: () => request("/api/v1/users/stats"),
@@ -348,3 +416,37 @@ export const api = {
   activityLogs: (params?: { page?: number; limit?: number; category?: string; actor_id?: string }) =>
     request(`/api/v1/analytics/events${qs(params as any)}`),
 };
+
+// ============================================================
+// Types pour l'historique de chat
+// ============================================================
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  mode: string;
+  message_count: number;
+  last_message_at: string;
+  created_at: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  mode?: string;
+  sources?: Array<{ id: string; title: string; content: string; score: number }>;
+  tool_calls?: Array<{ name: string; arguments: Record<string, unknown>; result: unknown }>;
+  cart_added?: number;
+  latency_ms?: number;
+  created_at: string;
+}
+
+export interface ConversationDetail {
+  id: string;
+  title: string;
+  mode: string;
+  messages: ConversationMessage[];
+  created_at: string;
+  last_message_at: string;
+}

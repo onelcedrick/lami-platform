@@ -20,7 +20,7 @@ export interface User {
   last_name: string;
   role: string;
   phone?: string;
-  avatar_url?: string | null;  
+  avatar_url?: string | null;
 }
 
 interface AuthState {
@@ -31,6 +31,7 @@ interface AuthState {
   // Actions
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   logout: () => void;
+  updateAvatar: (avatarUrl: string | null) => void;   // ✅ AJOUT
 
   // Sélecteurs de rôle
   isAuthenticated: () => boolean;
@@ -79,6 +80,13 @@ export const useAuthStore = create<AuthState>()(
             /* stores non prêts */
           }
         }, 0);
+      },
+
+      // ✅ Met à jour uniquement l'avatar dans le store (sans toucher aux tokens)
+      updateAvatar: (avatarUrl) => {
+        const current = get().user;
+        if (!current) return;
+        set({ user: { ...current, avatar_url: avatarUrl } });
       },
 
       // ----- Sélecteurs de rôle -----

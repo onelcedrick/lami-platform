@@ -52,6 +52,7 @@ export default function UserMenu() {
           firstName={user.first_name}
           lastName={user.last_name}
           email={user.email}
+          imageUrl={user.avatar_url}
           size="sm"
           ring
         />
@@ -81,6 +82,7 @@ export default function UserMenu() {
                 firstName={user.first_name}
                 lastName={user.last_name}
                 email={user.email}
+                imageUrl={user.avatar_url}
                 size="lg"
               />
               <div className="min-w-0 flex-1">

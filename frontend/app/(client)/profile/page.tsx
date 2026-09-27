@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
-import Avatar from "@/components/ui/Avatar";
+import AvatarUploader from "@/components/ui/AvatarUploader";
 
 interface GeoRegion {
   code: string;
@@ -22,6 +22,7 @@ interface Profile {
   role: string;
   locale?: string;
   currency?: string;
+  avatar_url?: string | null;
   address?: {
     street: string;
     city: string;
@@ -153,21 +154,31 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-4">
-        <Avatar
-          firstName={form.first_name || profile?.first_name}
-          lastName={form.last_name || profile?.last_name}
-          email={profile?.email}
-          size="xl"
-          ring
-        />
+      {/* Header */}
+      <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {form.first_name} {form.last_name}
+            Mon profil
           </h1>
           <p className="mt-1 text-slate-600 dark:text-slate-400">
-            {profile?.email}
+            Photo, informations personnelles et adresse de livraison
           </p>
+        </div>
+
+        {/* ✅ Upload de la photo de profil */}
+        <div className="card p-5">
+          <AvatarUploader
+            firstName={form.first_name || profile?.first_name}
+            lastName={form.last_name || profile?.last_name}
+            email={profile?.email}
+            currentUrl={profile?.avatar_url}
+            onUpdated={(url) => {
+              if (user && accessToken && refreshToken) {
+                setAuth({ ...user, avatar_url: url } as any, accessToken, refreshToken);
+              }
+              setProfile((prev) => (prev ? { ...prev, avatar_url: url } : prev));
+            }}
+          />
         </div>
       </div>
 
@@ -184,10 +195,10 @@ export default function ProfilePage() {
       )}
 
       <form onSubmit={handleSave} className="card mt-6 space-y-6 p-6">
-        {/* Identité */}
+        {/* Informations personnelles */}
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            Identité
+            Informations personnelles
           </h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <Field label="Prénom">
