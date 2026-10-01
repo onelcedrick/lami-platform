@@ -25,6 +25,14 @@ const (
 	PaymentStatusRefunded PaymentStatus = "refunded"
 )
 
+type Address struct {
+	Street  string `json:"street" bson:"street"`
+	City    string `json:"city" bson:"city"`
+	State   string `json:"state,omitempty" bson:"state,omitempty"`
+	Country string `json:"country" bson:"country"`
+	Phone   string `json:"phone,omitempty" bson:"phone,omitempty"`
+}
+
 type OrderItem struct {
 	ProductID   string  `json:"product_id" bson:"product_id"`
 	ProductName string  `json:"product_name" bson:"product_name"`

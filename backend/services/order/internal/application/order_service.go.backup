@@ -354,13 +354,9 @@ func (s *OrderService) PayOrder(ctx context.Context, id, userID, method, phone s
 
 	// Boutique : confirmation immédiate sans référence paiement
 	// Mobile Money : simulation validée (en prod → webhook opérateur)
-	// Boutique : confirmation immédiate (le client paiera sur place)
 	if method == "store" {
-		order.PaymentStatus = shareddomain.PaymentStatusPaid
+		order.PaymentStatus = shareddomain.PaymentStatusPending
 		order.Status = shareddomain.OrderStatusConfirmed
-		order.PaymentReference = generatePaymentReference("store")
-		now := time.Now().UTC()
-		order.PaidAt = &now
 	} else {
 		// mvola / orange_money / airtel_money / mobile_money
 		ref := generatePaymentReference(method)

@@ -44,7 +44,7 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
   const addItem = useCartStore((s) => s.addItem);
   const href = productHref(p);
 
-  // ----- Calculs effectués UNE SEULE FOIS -----
+  // ----- Calculs effectués UNE SEULE FOIS (accessibles dans tout le composant) -----
   const baseAr = toAriary(p.price);
   const promo = bestDiscountForProduct(discounts, {
     id: p.id,
@@ -68,7 +68,7 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
     addItem({
       productId: p.id,
       name: p.name,
-      price: finalPriceAr,
+      price: finalPriceAr, // toujours en Ariary dans le panier
       quantity: 1,
       image: p.images?.[0],
     });
@@ -76,28 +76,17 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
 
   return (
     <article className="card group flex flex-col overflow-hidden transition hover:shadow-md dark:hover:border-slate-600">
-      {/* Section Image - Ratio 4/3 fixe pour uniformité */}
       <div className="relative">
         <Link
           href={href}
-          className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-slate-50 p-4 dark:bg-slate-800/80"
+          className="relative flex h-40 items-center justify-center bg-slate-50 dark:bg-slate-800/80"
         >
-          <LazyImage
-            src={p.images?.[0]}
-            alt={p.name}
-            fallbackText={p.brand}
-            aspectRatio="4/3"
-            className="bg-slate-100 dark:bg-slate-800"
-          />
-          
-          {/* Badge Vedette */}
+          <LazyImage src={p.images?.[0]} alt={p.name} fallbackText={p.brand} aspectRatio="1/1" className="bg-slate-100 dark:bg-slate-800" />
           {p.is_featured && (
             <span className="absolute left-2 top-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
               Vedette
             </span>
           )}
-          
-          {/* Badge Rating */}
           {typeof p.rating === "number" && p.rating > 0 && (
             <span className="absolute right-2 top-2 flex items-center gap-0.5 rounded-full bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 dark:bg-slate-900/80 dark:text-slate-200">
               <StarIcon size={12} className="text-amber-500" />
@@ -105,43 +94,32 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
             </span>
           )}
         </Link>
-        
-        {/* Bouton Favoris */}
         <FavoriteButton product={{ ...p, id: p.id }} floating size={18} />
       </div>
 
-      {/* Section Contenu */}
       <div className="flex flex-1 flex-col p-4">
-        {/* Marque */}
         <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
           {p.brand}
         </p>
-        
-        {/* Nom du produit */}
         <Link
           href={href}
           className="mt-1 line-clamp-2 font-semibold text-slate-900 transition hover:text-primary-600 dark:text-slate-100 dark:hover:text-primary-400"
         >
           {p.name}
         </Link>
-        
-        {/* Description courte */}
         {p.short_description && (
           <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
             {p.short_description}
           </p>
         )}
 
-        {/* Section Prix et Actions */}
         <div className="mt-auto pt-3">
-          {/* Badge Promotion */}
           {hasPromo && promo && (
             <span className="mb-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300">
               -{formatDiscountValue(promo)} · {promo.name}
             </span>
           )}
 
-          {/* Prix */}
           <div className="flex items-baseline gap-2">
             <span className="text-lg font-bold text-primary-600 dark:text-primary-400">
               {formatAriary(finalPriceAr)}
@@ -153,7 +131,6 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
             )}
           </div>
 
-          {/* Stock */}
           <p
             className={`mt-1 text-xs ${
               p.stock > 0
@@ -164,18 +141,16 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
             {p.stock > 0 ? `En stock (${p.stock})` : "Rupture de stock"}
           </p>
 
-          {/* Actions: Ajouter + Partager */}
           <div className="mt-3 flex gap-2">
             <button
               type="button"
               onClick={handleAdd}
               disabled={p.stock <= 0}
-              className="group relative flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-primary-700 hover:shadow-lg hover:shadow-primary-600/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-primary-700 dark:hover:bg-primary-600"
+              className="group relative flex-1 overflow-hidden rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-primary-700 hover:shadow-lg hover:shadow-primary-600/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-primary-700 dark:hover:bg-primary-600"
             >
-              <CartIcon size={16} className="transition-transform group-hover:-translate-y-0.5" />
-              <span>Ajouter</span>
+              <CartIcon size={16} />
+              Ajouter
             </button>
-            
             <ShareProductButton
               productName={p.name}
               path={href}

@@ -3,32 +3,68 @@
 @tailwind utilities;
 
 /* ============================================================
-   Palette unifiée light / dark
-   Règle : en dark, le fond est PLUS SOMBRE que les cards,
-   elles-mêmes plus sombres que les éléments surélevés.
+   Design System L'AMI - Palette & Variables Modernes
    ============================================================ */
 
 :root {
-  --bg-app: #f8fafc;        /* slate-50 */
-  --bg-surface: #ffffff;    /* blanc */
-  --bg-elevated: #ffffff;   /* dropdowns, modals */
-  --fg-primary: #0f172a;    /* slate-900 */
-  --fg-secondary: #475569;  /* slate-600 */
-  --fg-muted: #94a3b8;      /* slate-400 */
-  --border: #e2e8f0;        /* slate-200 */
-  --border-strong: #cbd5e1; /* slate-300 */
+  /* Backgrounds */
+  --bg-app: #fafafa;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-muted: #f4f4f5;
+
+  /* Foregrounds */
+  --fg-primary: #18181b;
+  --fg-secondary: #52525b;
+  --fg-muted: #a1a1aa;
+  --fg-accent: #3b82f6;
+
+  /* Borders */
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+
+  /* Semantic Colors */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+
+  /* Shadows (Light) */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 }
 
 .dark {
-  --bg-app: #0f172a;        /* slate-900 — fond, PAS noir pur */
-  --bg-surface: #1e293b;    /* slate-800 — cards */
-  --bg-elevated: #334155;   /* slate-700 — dropdowns, modals */
-  --fg-primary: #e2e8f0;    /* slate-200 — PAS blanc pur */
-  --fg-secondary: #94a3b8;  /* slate-400 */
-  --fg-muted: #64748b;      /* slate-500 */
-  --border: #334155;        /* slate-700 */
-  --border-strong: #475569; /* slate-600 */
+  /* Backgrounds */
+  --bg-app: #09090b;
+  --bg-surface: #18181b;
+  --bg-elevated: #27272a;
+  --bg-muted: #27272a;
+
+  /* Foregrounds */
+  --fg-primary: #fafafa;
+  --fg-secondary: #a1a1aa;
+  --fg-muted: #71717a;
+  --fg-accent: #60a5fa;
+
+  /* Borders */
+  --border: #27272a;
+  --border-strong: #3f3f46;
+
+  /* Shadows (Dark) */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
 }
+
+/* ============================================================
+   Base Styles
+   ============================================================ */
 
 html,
 body {
@@ -37,14 +73,13 @@ body {
   font-family: Inter, system-ui, -apple-system, sans-serif;
 }
 
-/* Transition douce uniquement sur les couleurs (pas layout) */
+/* Transition douce sur les couleurs et ombres */
 *,
 *::before,
 *::after {
-  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.15s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.15s ease, box-shadow 0.25s ease;
 }
 
-/* Empêche le flash blanc/bleu au changement de page */
 html.dark {
   color-scheme: dark;
 }
@@ -52,55 +87,74 @@ html {
   color-scheme: light;
 }
 
+/* ============================================================
+   Components (Compatibilité avec l'existant)
+   ============================================================ */
+
 @layer components {
-  /* ---------- Boutons ---------- */
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-primary-500 dark:hover:bg-primary-600 dark:focus:ring-offset-slate-900;
-  }
-
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus:ring-offset-slate-900;
-  }
-
-  /* ---------- Inputs ---------- */
-  .input-field {
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-primary-400;
-  }
-
-  /* ---------- Card (source de vérité) ---------- */
+  /* Card moderne */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none dark:ring-1 dark:ring-white/5;
+    @apply rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm;
   }
 
-  /* Effet de verre dépoli pour le header et les modales */
-  .glass {
-    @apply bg-white/80 backdrop-blur-md dark:bg-slate-900/80 dark:backdrop-blur-md;
-  }
-
-  /* ---------- Card admin (légèrement surélevée) ---------- */
-  .card-admin {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800;
+  /* Bouton primaire (pour compatibilité avec l'existant) */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 }
 
-/* Scrollbar sombre mais douce */
-.dark ::-webkit-scrollbar {
+/* ============================================================
+   Utilities (Nouvelles classes modernes)
+   ============================================================ */
+
+@layer utilities {
+  /* Espacement cohérent */
+  .space-section { @apply py-16 sm:py-20 lg:py-24; }
+  .space-container { @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8; }
+
+  /* Glassmorphism */
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl border border-white/20;
+  }
+  .dark .glass {
+    @apply bg-zinc-900/70 border-zinc-800/50;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent;
+  }
+  .dark .gradient-text {
+    @apply from-blue-400 via-purple-400 to-pink-400;
+  }
+
+  /* Hover Lift Effect */
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lg;
+  }
+
+  /* Focus Ring Accessible */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 dark:focus:ring-offset-zinc-900;
+  }
+}
+
+/* ============================================================
+   Scrollbar personnalisée
+   ============================================================ */
+
+::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
-.dark ::-webkit-scrollbar-track {
-  background: #0f172a;
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
 }
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155;
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
   border-radius: 5px;
-  border: 2px solid #0f172a;
+  border: 2px solid var(--bg-app);
 }
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
-
-/* Barre de recherche : contour léger en dark */
-.dark input[type="search"]::-webkit-search-cancel-button {
-  filter: invert(1);
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-muted);
 }
