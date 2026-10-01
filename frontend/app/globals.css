@@ -2,34 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================================
-   Design System L'AMI - Palette & Variables Modernes
-   ============================================================ */
-
 :root {
-  /* Backgrounds */
-  --bg-app: #fafafa;
-  --bg-surface: #ffffff;
-  --bg-elevated: #ffffff;
-  --bg-muted: #f4f4f5;
-
-  /* Foregrounds */
-  --fg-primary: #18181b;
-  --fg-secondary: #52525b;
-  --fg-muted: #a1a1aa;
-  --fg-accent: #3b82f6;
-
-  /* Borders */
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-
-  /* Semantic Colors */
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --info: #3b82f6;
-
-  /* Shadows (Light) */
+  --bg-app: #fafafa; --bg-surface: #ffffff; --bg-elevated: #ffffff; --bg-muted: #f4f4f5;
+  --fg-primary: #18181b; --fg-secondary: #52525b; --fg-muted: #a1a1aa; --fg-accent: #3b82f6;
+  --border: #e4e4e7; --border-strong: #d4d4d8;
+  --success: #10b981; --warning: #f59e0b; --error: #ef4444; --info: #3b82f6;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -38,23 +15,9 @@
 }
 
 .dark {
-  /* Backgrounds */
-  --bg-app: #09090b;
-  --bg-surface: #18181b;
-  --bg-elevated: #27272a;
-  --bg-muted: #27272a;
-
-  /* Foregrounds */
-  --fg-primary: #fafafa;
-  --fg-secondary: #a1a1aa;
-  --fg-muted: #71717a;
-  --fg-accent: #60a5fa;
-
-  /* Borders */
-  --border: #27272a;
-  --border-strong: #3f3f46;
-
-  /* Shadows (Dark) */
+  --bg-app: #09090b; --bg-surface: #18181b; --bg-elevated: #27272a; --bg-muted: #27272a;
+  --fg-primary: #fafafa; --fg-secondary: #a1a1aa; --fg-muted: #71717a; --fg-accent: #60a5fa;
+  --border: #27272a; --border-strong: #3f3f46;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
@@ -62,99 +25,35 @@
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
 }
 
-/* ============================================================
-   Base Styles
-   ============================================================ */
-
-html,
-body {
-  color: var(--fg-primary);
-  background: var(--bg-app);
+html, body {
+  color: var(--fg-primary); background: var(--bg-app);
   font-family: Inter, system-ui, -apple-system, sans-serif;
 }
 
-/* Transition douce sur les couleurs et ombres */
-*,
-*::before,
-*::after {
+*, *::before, *::after {
   transition: background-color 0.25s ease, border-color 0.25s ease, color 0.15s ease, box-shadow 0.25s ease;
 }
 
-html.dark {
-  color-scheme: dark;
-}
-html {
-  color-scheme: light;
-}
-
-/* ============================================================
-   Components (Compatibilité avec l'existant)
-   ============================================================ */
+html.dark { color-scheme: dark; }
+html { color-scheme: light; }
 
 @layer components {
-  /* Card moderne */
-  .card {
-    @apply rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm;
-  }
-
-  /* Bouton primaire (pour compatibilité avec l'existant) */
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
-  }
+  .card { @apply rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed; }
 }
-
-/* ============================================================
-   Utilities (Nouvelles classes modernes)
-   ============================================================ */
 
 @layer utilities {
-  /* Espacement cohérent */
   .space-section { @apply py-16 sm:py-20 lg:py-24; }
   .space-container { @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8; }
-
-  /* Glassmorphism */
-  .glass {
-    @apply bg-white/70 backdrop-blur-xl border border-white/20;
-  }
-  .dark .glass {
-    @apply bg-zinc-900/70 border-zinc-800/50;
-  }
-
-  /* Gradient Text */
-  .gradient-text {
-    @apply bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent;
-  }
-  .dark .gradient-text {
-    @apply from-blue-400 via-purple-400 to-pink-400;
-  }
-
-  /* Hover Lift Effect */
-  .hover-lift {
-    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lg;
-  }
-
-  /* Focus Ring Accessible */
-  .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 dark:focus:ring-offset-zinc-900;
-  }
+  .glass { @apply bg-white/70 backdrop-blur-xl border border-white/20; }
+  .dark .glass { @apply bg-zinc-900/70 border-zinc-800/50; }
+  .gradient-text { @apply bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent; }
+  .dark .gradient-text { @apply from-blue-400 via-purple-400 to-pink-400; }
+  .hover-lift { @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lg; }
+  .focus-ring { @apply focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 dark:focus:ring-offset-zinc-900; }
 }
 
-/* ============================================================
-   Scrollbar personnalisée
-   ============================================================ */
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-app);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 5px;
-  border: 2px solid var(--bg-app);
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--fg-muted);
-}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-app); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; border: 2px solid var(--bg-app); }
+::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }

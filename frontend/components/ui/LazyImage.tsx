@@ -22,6 +22,14 @@ interface LazyImageProps {
 const SHIMMER =
   "absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent dark:via-white/10";
 
+function useImagePrefetch() {
+  return (src: string) => {
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      requestIdleCallback(() => { const img = new Image(); img.src = src; });
+    }
+  };
+}
+
 export default function LazyImage({
   src,
   alt,
@@ -84,7 +92,7 @@ export default function LazyImage({
   }
 
   return (
-    <div ref={wrapperRef} className={wrapperClass}>
+    <div ref={wrapperRef} className={wrapperClass} onMouseEnter={() => src && useImagePrefetch()(src)}>
       {/* Placeholder LQIP (blur) */}
       {placeholder && (
         <img
