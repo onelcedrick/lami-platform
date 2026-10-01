@@ -58,7 +58,7 @@ const CATEGORIES = [
 
 export default function HomePage() {
   return (
-    <div className="bg-slate-50 dark:bg-slate-950">
+    <div className="bg-[var(--bg-app)] text-[var(--fg-primary)] transition-colors duration-300">
       {/* ===================== HERO ===================== */}
       <HeroSection />
 
@@ -66,7 +66,7 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="text-center">
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
-            Nos services
+            <span className="bg-gradient-to-r from-primary-600 to-accent-500 bg-clip-text text-transparent dark:from-primary-400 dark:to-accent-400">Nos services</span>
           </h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-slate-500 dark:text-slate-400">
             Tout ce dont vous avez besoin pour votre matériel informatique
@@ -104,7 +104,7 @@ export default function HomePage() {
         <div className="flex items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
-              Catégories
+              <span className="bg-gradient-to-r from-primary-600 to-accent-500 bg-clip-text text-transparent dark:from-primary-400 dark:to-accent-400">Catégories</span>
             </h2>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
               Explorez nos composants et configurations

@@ -81,7 +81,7 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
           href={href}
           className="relative flex h-40 items-center justify-center bg-slate-50 dark:bg-slate-800/80"
         >
-          <LazyImage src={p.images?.[0]} alt={p.name} fallbackText={p.brand} />
+          <LazyImage src={p.images?.[0]} alt={p.name} fallbackText={p.brand} aspectRatio="1/1" className="bg-slate-100 dark:bg-slate-800" />
           {p.is_featured && (
             <span className="absolute left-2 top-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
               Vedette
@@ -146,7 +146,7 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
               type="button"
               onClick={handleAdd}
               disabled={p.stock <= 0}
-              className="btn-primary flex-1 text-sm disabled:opacity-50"
+              className="group relative flex-1 overflow-hidden rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-primary-700 hover:shadow-lg hover:shadow-primary-600/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-primary-700 dark:hover:bg-primary-600"
             >
               <CartIcon size={16} />
               Ajouter
