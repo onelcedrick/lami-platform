@@ -1,174 +1,148 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { api } from "@/lib/api";
-import { Order, Ticket, ORDER_STATUS_LABELS, TICKET_STATUS_LABELS } from "@/lib/types";
-import StatusBadge from "@/components/ui/StatusBadge";
+import KPICard from "@/components/admin/live/KPICard";
+import LiveFeed from "@/components/admin/live/LiveFeed";
+import ServiceHealthGrid from "@/components/admin/live/ServiceHealthGrid";
+import LatencyChart from "@/components/admin/live/LatencyChart";
+import { useLiveStore } from "@/lib/live-store";
+import { useSSE } from "@/lib/use-sse";
+import { liveApi } from "@/lib/live-api";
 import { formatAriary } from "@/lib/currency";
-import { CartIcon, TicketIcon, CpuIcon, UserIcon } from "@/components/ui/icons";
+import {
+  CartIcon,
+  EyeIcon,
+  TicketIcon,
+  RefreshIcon,
+  ZapIcon,
+} from "@/components/ui/icons";
 
-export default function AdminDashboardPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [productCount, setProductCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+export default function AdminLiveDashboardPage() {
+  const { connected, events, services, kpi, setServices, setKPI } = useLiveStore();
+  const [refreshing, setRefreshing] = useState(false);
+  const [latencyHistory, setLatencyHistory] = useState<
+    { time: string; p50: number; p95: number }[]
+  >([]);
+
+  useSSE();
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [ordRes, tktRes, prodRes] = await Promise.all([
-          api.listOrders({ limit: 5 }),
-          api.listTickets({ limit: 5 }),
-          api.listProducts({ limit: 1 }),
-        ]);
-        if (ordRes.success && ordRes.data) setOrders(ordRes.data as Order[]);
-        if (tktRes.success && tktRes.data) setTickets(tktRes.data as Ticket[]);
-        if (prodRes.meta?.total) setProductCount(prodRes.meta.total);
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
+    let mounted = true;
+    async function refresh() {
+      const [k, s] = await Promise.all([liveApi.kpi(), liveApi.services()]);
+      if (!mounted) return;
+      if (k) {
+        setKPI(k);
+        setLatencyHistory((prev) => {
+          const now = new Date().toLocaleTimeString("fr-FR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+          const next = [
+            ...prev,
+            {
+              time: now,
+              p50: k.ia_latence_p50_ms,
+              p95: Math.round(k.ia_latence_p50_ms * 1.8),
+            },
+          ];
+          return next.slice(-30);
+        });
       }
+      if (s) setServices(s);
     }
-    load();
-  }, []);
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [setKPI, setServices]);
 
-  const openTickets = tickets.filter(
-    (t) => t.status === "open" || t.status === "in_progress"
-  ).length;
-  const pendingOrders = orders.filter(
-    (o) => o.status === "pending" || o.status === "confirmed"
-  ).length;
-
-  const kpis = [
-    { label: "Produits", value: productCount, href: "/admin/products", icon: CpuIcon },
-    { label: "Commandes récentes", value: orders.length, href: "/admin/orders", icon: CartIcon },
-    { label: "Tickets ouverts", value: openTickets, href: "/admin/tickets", icon: TicketIcon },
-    { label: "En attente traitement", value: pendingOrders, href: "/admin/orders", icon: UserIcon },
-  ];
+  async function manualRefresh() {
+    setRefreshing(true);
+    const [k, s] = await Promise.all([liveApi.kpi(), liveApi.services()]);
+    if (k) setKPI(k);
+    if (s) setServices(s);
+    setRefreshing(false);
+  }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-        Dashboard administrateur
-      </h1>
-      <p className="mt-1 text-slate-600 dark:text-slate-400">
-        Vue d&apos;ensemble de la plateforme L&apos;AMI
-      </p>
-
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((k) => {
-          const Icon = k.icon;
-          return (
-            <Link
-              key={k.label}
-              href={k.href}
-              className="card p-5 transition hover:shadow-md dark:hover:border-slate-600"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                  {k.label}
-                </p>
-                <Icon size={20} className="text-primary-500" />
-              </div>
-              <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-slate-100">
-                {loading ? "—" : k.value}
-              </p>
-            </Link>
-          );
-        })}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            Dashboard temps reel
+          </h1>
+          <p className="mt-1 text-slate-600 dark:text-slate-400">
+            Vue live de la plateforme L AMI
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+              connected
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400"
+            }`}
+          >
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                connected ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+              }`}
+            />
+            {connected ? "Connecte" : "Deconnecte"}
+          </span>
+          <button
+            onClick={manualRefresh}
+            disabled={refreshing}
+            className="btn-secondary"
+          >
+            <RefreshIcon size={16} />
+            {refreshing ? "..." : "Rafraichir"}
+          </button>
+        </div>
       </div>
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-2">
-        <section className="card">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-            <h2 className="font-semibold text-slate-900 dark:text-slate-100">
-              Dernières commandes
-            </h2>
-            <Link
-              href="/admin/orders"
-              className="text-sm text-primary-600 hover:underline dark:text-primary-400"
-            >
-              Voir tout
-            </Link>
-          </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {loading ? (
-              <p className="p-5 text-sm text-slate-400">Chargement...</p>
-            ) : orders.length === 0 ? (
-              <p className="p-5 text-sm text-slate-400">Aucune commande</p>
-            ) : (
-              orders.map((o) => (
-                <Link
-                  key={o.id}
-                  href={`/admin/orders?id=${o.id}`}
-                  className="flex items-center justify-between px-5 py-3 transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                      {o.order_number}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {new Date(o.created_at).toLocaleDateString("fr-FR")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {formatAriary(o.total)}
-                    </span>
-                    <StatusBadge
-                      status={o.status}
-                      label={ORDER_STATUS_LABELS[o.status]}
-                    />
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </section>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KPICard
+          label="CA du jour"
+          value={kpi ? formatAriary(kpi.ca_jour_mga) : "-"}
+          icon={<ZapIcon size={20} />}
+          accent="green"
+          subtitle={`${kpi?.commandes_jour ?? 0} commande(s)`}
+        />
+        <KPICard
+          label="Commandes"
+          value={kpi?.commandes_jour ?? 0}
+          icon={<CartIcon size={20} />}
+          accent="blue"
+          subtitle={
+            kpi ? `Panier moyen ${formatAriary(kpi.panier_moyen_mga)}` : undefined
+          }
+        />
+        <KPICard
+          label="Visiteurs du jour"
+          value={kpi?.visiteurs_jour ?? 0}
+          icon={<EyeIcon size={20} />}
+          accent="purple"
+        />
+        <KPICard
+          label="Tickets ouverts"
+          value={kpi?.tickets_ouverts ?? 0}
+          icon={<TicketIcon size={20} />}
+          accent={kpi && kpi.tickets_ouverts > 10 ? "red" : "amber"}
+        />
+      </div>
 
-        <section className="card">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-            <h2 className="font-semibold text-slate-900 dark:text-slate-100">
-              Derniers tickets
-            </h2>
-            <Link
-              href="/admin/tickets"
-              className="text-sm text-primary-600 hover:underline dark:text-primary-400"
-            >
-              Voir tout
-            </Link>
-          </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {loading ? (
-              <p className="p-5 text-sm text-slate-400">Chargement...</p>
-            ) : tickets.length === 0 ? (
-              <p className="p-5 text-sm text-slate-400">Aucun ticket</p>
-            ) : (
-              tickets.map((t) => (
-                <Link
-                  key={t.id}
-                  href={`/admin/tickets?id=${t.id}`}
-                  className="flex items-center justify-between px-5 py-3 transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                >
-                  <div className="min-w-0 flex-1 pr-3">
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-1">
-                      {t.title}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {t.ticket_number}
-                    </p>
-                  </div>
-                  <StatusBadge
-                    status={t.status}
-                    label={TICKET_STATUS_LABELS[t.status]}
-                  />
-                </Link>
-              ))
-            )}
-          </div>
-        </section>
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <ServiceHealthGrid services={services} />
+        <LatencyChart data={latencyHistory} />
+      </div>
+
+      <div className="mt-6">
+        <LiveFeed events={events} />
       </div>
     </div>
   );

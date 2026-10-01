@@ -13,11 +13,10 @@ import (
 type AnalyticsService struct {
 	visitors domain.VisitorRepository
 	logs     domain.ActivityRepository
-	hub      *LiveHub
 }
 
-func NewAnalyticsService(visitors domain.VisitorRepository, logs domain.ActivityRepository, hub *LiveHub) *AnalyticsService {
-	return &AnalyticsService{visitors: visitors, logs: logs, hub: hub}
+func NewAnalyticsService(visitors domain.VisitorRepository, logs domain.ActivityRepository) *AnalyticsService {
+	return &AnalyticsService{visitors: visitors, logs: logs}
 }
 
 func todayUTC() string {
@@ -33,11 +32,10 @@ func (s *AnalyticsService) TrackVisit(ctx context.Context, req shareddomain.Trac
 	if err != nil {
 		return nil, err
 	}
+	// Les page views restent dans daily_visitors (pas dans activity_logs pour eviter le bruit)
+	_ = ip
+	_ = ua
 	stats.VisitorIDs = nil
-
-	if s.hub != nil {
-		s.hub.PublishVisitor(req.VisitorID, ip, ua)
-	}
 	return stats, nil
 }
 
@@ -106,10 +104,6 @@ func (s *AnalyticsService) LogActivity(ctx context.Context, req shareddomain.Cre
 	}
 	if err := s.logs.Create(ctx, log); err != nil {
 		return nil, err
-	}
-
-	if s.hub != nil {
-		s.hub.PublishActivity(log)
 	}
 	return log, nil
 }

@@ -602,4 +602,4 @@ if __name__ == "__main__":
     r.rag_content_match = True
     assert compute_score(r) == 1.0
 
-    print("✅ metrics.py : tous les tests passent.")
+    print(" metrics.py : tous les tests passent.")

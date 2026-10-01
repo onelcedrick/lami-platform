@@ -8,26 +8,12 @@ import (
 	"github.com/lami-platform/shared/pkg/middleware"
 )
 
-func SetupRoutes(
-	app *fiber.App,
-	handler *AnalyticsHandler,
-	liveHandler *LiveHandler,
-	jwtSecret string,
-) {
+func SetupRoutes(app *fiber.App, handler *AnalyticsHandler, jwtSecret string) {
 	api := app.Group("/api/v1/analytics")
 
 	api.Get("/health", handler.Health)
 
-	// Sante des 9 services
-	api.Get("/health/services", liveHandler.HealthAll)
-
-	// SSE stream temps reel
-	api.Get("/stream", liveHandler.Stream)
-
-	// KPIs temps reel
-	api.Get("/kpi", liveHandler.KPI)
-
-	// Public : tracking visiteurs anonymes
+	// Public : tracking visiteurs anonymes (hors login)
 	api.Post("/visit", handler.TrackVisit)
 
 	// Journalisation (auth optionnelle)

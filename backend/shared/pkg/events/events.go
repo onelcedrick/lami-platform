@@ -59,3 +59,74 @@ type OrderCancelledEvent struct {
 	Items       []OrderItemEvent `json:"items"`
 	Reason      string           `json:"reason,omitempty"`
 }
+
+// ============================================================
+// AJOUT : Events pour le dashboard temps reel
+// ============================================================
+
+const (
+	// Nouvelles queues
+	QueueAnalyticsLive    = "analytics.live"
+	QueueAnalyticsCatalog = "analytics.catalog"
+	QueueAnalyticsTicket  = "analytics.ticket"
+
+	// Nouveaux routing keys
+	RoutingProductViewed  = "product.viewed"
+	RoutingTicketCreated  = "ticket.created"
+	RoutingTicketAssigned = "ticket.assigned"
+	RoutingIAChatDone     = "ia.chat.completed"
+	RoutingServiceBeat    = "service.heartbeat"
+)
+
+// ProductViewedEvent - publie par catalog-service a chaque vue produit
+type ProductViewedEvent struct {
+	EventID     string    `json:"event_id"`
+	OccurredAt  time.Time `json:"occurred_at"`
+	ProductID   string    `json:"product_id"`
+	ProductName string    `json:"product_name"`
+	UserID      string    `json:"user_id,omitempty"`
+	VisitorID   string    `json:"visitor_id,omitempty"`
+}
+
+// TicketCreatedEvent - publie par ticket-service
+type TicketCreatedEvent struct {
+	EventID      string    `json:"event_id"`
+	OccurredAt   time.Time `json:"occurred_at"`
+	TicketID     string    `json:"ticket_id"`
+	TicketNumber string    `json:"ticket_number"`
+	UserID       string    `json:"user_id"`
+	Title        string    `json:"title"`
+	Category     string    `json:"category"`
+	Priority     string    `json:"priority"`
+	AutoAssigned bool      `json:"auto_assigned"`
+}
+
+// TicketAssignedEvent - publie par ticket-service
+type TicketAssignedEvent struct {
+	EventID      string    `json:"event_id"`
+	OccurredAt   time.Time `json:"occurred_at"`
+	TicketID     string    `json:"ticket_id"`
+	TicketNumber string    `json:"ticket_number"`
+	TechnicianID string    `json:"technician_id"`
+	AutoAssigned bool      `json:"auto_assigned"`
+}
+
+// IAChatCompletedEvent - publie par ia-service (optionnel)
+type IAChatCompletedEvent struct {
+	EventID        string    `json:"event_id"`
+	OccurredAt     time.Time `json:"occurred_at"`
+	ConversationID string    `json:"conversation_id"`
+	Mode           string    `json:"mode"`
+	LatencyMs      int       `json:"latency_ms"`
+	ToolCalls      int       `json:"tool_calls"`
+	Error          bool      `json:"error"`
+}
+
+// ServiceHeartbeatEvent - publie periodiquement par chaque service
+type ServiceHeartbeatEvent struct {
+	EventID   string    `json:"event_id"`
+	Service   string    `json:"service"`
+	Status    string    `json:"status"`
+	Timestamp time.Time `json:"occurred_at"`
+	LatencyMs int       `json:"latency_ms,omitempty"`
+}

@@ -23,11 +23,11 @@ interface CatalogToolbarProps {
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string; icon: string }[] = [
-  { value: "relevance", label: "Pertinence", icon: "🎯" },
-  { value: "popularity", label: "Popularité", icon: "🔥" },
-  { value: "price_asc", label: "Prix croissant", icon: "↑" },
-  { value: "price_desc", label: "Prix décroissant", icon: "↓" },
-  { value: "name", label: "Nom (A-Z)", icon: "🔤" },
+  { value: "relevance", label: "Pertinence", icon: "" },
+  { value: "popularity", label: "Popularité", icon: "" },
+  { value: "price_asc", label: "Prix croissant", icon: "" },
+  { value: "price_desc", label: "Prix décroissant", icon: "" },
+  { value: "name", label: "Nom (A-Z)", icon: "" },
 ];
 
 export default function CatalogToolbar({

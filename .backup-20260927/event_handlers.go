@@ -10,11 +10,6 @@ import (
 )
 
 func (s *AnalyticsService) HandleOrderEvent(ctx context.Context, routingKey string, body []byte) error {
-	// Broadcast SSE
-	if s.hub != nil {
-		s.hub.PublishOrderEvent(routingKey, body)
-	}
-
 	var orderID, orderNumber, userID, action, message string
 	var total float64
 

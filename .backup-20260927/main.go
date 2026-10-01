@@ -11,12 +11,11 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"github.com/lami-platform/shared/pkg/config"
-	"github.com/lami-platform/shared/pkg/events"
 	"github.com/lami-platform/shared/pkg/logger"
-	"github.com/lami-platform/shared/pkg/metrics"
 	"github.com/lami-platform/shared/pkg/middleware"
 	"github.com/lami-platform/shared/pkg/mongodb"
 	"github.com/lami-platform/shared/pkg/rabbitmq"
+	"github.com/lami-platform/shared/pkg/events"
 	"github.com/lami-platform/services/analytics/internal/application"
 	"github.com/lami-platform/services/analytics/internal/infrastructure"
 	httpHandler "github.com/lami-platform/services/analytics/internal/interfaces/http"
@@ -38,30 +37,13 @@ func main() {
 		_ = mongoClient.Disconnect(ctx)
 	}()
 
-	// Connexions additionnelles pour les KPIs cross-DB
-	orderDB := mongoClient.Client.Database("lami_order")
-	ticketDB := mongoClient.Client.Database("lami_ticket")
-	iaDB := mongoClient.Client.Database("lami_ia")
-	analyticsDB := mongoClient.Database
-
-	// Hub SSE + Health + KPI
-	hub := application.NewLiveHub()
-	healthChecker := application.NewHealthChecker(hub)
-	kpiAggregator := application.NewKPIAggregator(analyticsDB, orderDB, ticketDB, iaDB)
-
 	visitorRepo := infrastructure.NewMongoVisitorRepository(mongoClient)
 	activityRepo := infrastructure.NewMongoActivityRepository(mongoClient)
-	service := application.NewAnalyticsService(visitorRepo, activityRepo, hub)
+	service := application.NewAnalyticsService(visitorRepo, activityRepo)
 	handler := httpHandler.NewAnalyticsHandler(service)
-	liveHandler := httpHandler.NewLiveHandler(hub, healthChecker, kpiAggregator)
-
-	// Demarre le health checker en background
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go healthChecker.Run(ctx)
 
 	if rmq, err := rabbitmq.Connect(cfg.RabbitURL); err != nil {
-		logger.Warn().Err(err).Msg("RabbitMQ indisponible - analytics evenements off")
+		logger.Warn().Err(err).Msg("RabbitMQ indisponible — analytics evenements off")
 	} else {
 		defer rmq.Close()
 		_ = rmq.Subscribe(events.QueueAnalyticsOrders, []string{
@@ -74,16 +56,14 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName:      "L'AMI Analytics Service",
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 0,
+		WriteTimeout: 10 * time.Second,
 	})
 
 	app.Use(recover.New())
-	app.Use(metrics.Middleware("analytics"))
-	app.Get("/metrics", metrics.Handler)
 	app.Use(middleware.SecureCORS())
 	app.Use(middleware.RateLimit(cfg.RateLimit))
 
-	httpHandler.SetupRoutes(app, handler, liveHandler, cfg.JWTSecret)
+	httpHandler.SetupRoutes(app, handler, cfg.JWTSecret)
 
 	go func() {
 		addr := ":" + cfg.HTTPPort
@@ -98,7 +78,7 @@ func main() {
 	<-quit
 
 	logger.Info().Msg("Arret du Analytics Service...")
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdownCancel()
-	_ = app.ShutdownWithContext(shutdownCtx)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = app.ShutdownWithContext(ctx)
 }
