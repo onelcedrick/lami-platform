@@ -711,6 +711,7 @@ export function WrenchIcon({ size = 22, className = "" }: { size?: number; class
   );
 }
 
+}
 
 export function AwardIcon({ size = 22, className = "" }: { size?: number; className?: string }) {
   return (

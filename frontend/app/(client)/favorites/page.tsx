@@ -26,16 +26,16 @@ export default function FavoritesPage() {
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[var(--bg-muted)]">
           <HeartIcon
             size={32}
-            className="text-slate-300 dark:text-slate-600"
+            className="text-[var(--fg-muted)]"
           />
         </div>
-        <h1 className="mt-6 text-2xl font-bold text-slate-900 dark:text-slate-100">
+        <h1 className="mt-6 text-2xl font-bold text-[var(--fg-primary)]">
           Aucun favori pour le moment
         </h1>
-        <p className="mt-2 text-slate-500 dark:text-slate-400">
+        <p className="mt-2 text-[var(--fg-secondary)]">
           Ajoutez des produits à vos favoris pour les retrouver facilement
         </p>
         <Link href="/catalog" className="btn-primary mt-6 inline-flex">
@@ -51,11 +51,11 @@ export default function FavoritesPage() {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--fg-muted)]">
             <HeartIcon size={14} filled className="text-red-500" />
             Mes favoris
           </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--fg-primary)] sm:text-3xl">
             {items.length} produit{items.length > 1 ? "s" : ""} favori
             {items.length > 1 ? "s" : ""}
           </h1>
@@ -74,12 +74,12 @@ export default function FavoritesPage() {
         {items.map((item) => (
           <div
             key={item.productId}
-            className="group card relative flex flex-col overflow-hidden transition hover:-translate-y-1 hover:shadow-lg dark:hover:border-slate-600"
+            className="group card relative flex flex-col overflow-hidden transition hover:-translate-y-1 hover:shadow-lg "
           >
             {/* Image */}
             <Link
               href={`/product/${encodeURIComponent(item.slug || item.productId)}`}
-              className="relative block aspect-[4/3] overflow-hidden bg-slate-50 dark:bg-slate-800/60"
+              className="relative block aspect-[4/3] overflow-hidden bg-[var(--bg-muted)]"
             >
               <LazyImage
                 src={item.image}
@@ -94,7 +94,7 @@ export default function FavoritesPage() {
             <button
               type="button"
               onClick={() => remove(item.productId)}
-              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-500 shadow-sm backdrop-blur transition hover:bg-white hover:scale-110 dark:bg-slate-900/90 dark:hover:bg-slate-900"
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-500 shadow-sm backdrop-blur transition hover:bg-white hover:scale-110 dark:bg-zinc-900/90 dark:hover:bg-zinc-900"
               aria-label="Retirer des favoris"
             >
               <HeartIcon size={16} filled />
@@ -102,7 +102,7 @@ export default function FavoritesPage() {
 
             {/* Contenu */}
             <div className="flex flex-1 flex-col p-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--fg-muted)]">
                 {item.brand}
               </p>
               <Link
@@ -113,7 +113,7 @@ export default function FavoritesPage() {
               </Link>
 
               <div className="mt-auto pt-3">
-                <p className="text-lg font-bold text-primary-600 dark:text-primary-400">
+                <p className="text-lg font-bold text-[var(--fg-accent)]">
                   {formatAriary(item.price)}
                 </p>
 
@@ -129,7 +129,7 @@ export default function FavoritesPage() {
                         image: item.image,
                       })
                     }
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--fg-accent)] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
                   >
                     <CartIcon size={15} />
                     Ajouter

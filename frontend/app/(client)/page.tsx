@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { ChevronRightIcon, CpuIcon, StarIcon } from "@/components/ui/icons";
+import {
+  ChevronRightIcon,
+  CpuIcon,
+  StarIcon,
+  BoxIcon,
+  WrenchIcon,
+  MapPinIcon,
+  AwardIcon,
+} from "@/components/ui/icons";
 import AnimatedSection from "@/components/ui/AnimatedSection";
 import NewArrivals from "@/components/home/NewArrivals";
 import PopularProducts from "@/components/home/PopularProducts";
@@ -8,22 +16,22 @@ import HeroSection from "@/components/home/HeroSection";
 const SERVICES = [
   {
     title: "Vente Matériel", desc: "Ordinateurs, écrans, composants PC, pièces détachées.",
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></svg>,
+    icon: <BoxIcon size={22} />,
     tint: "bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
   },
   {
     title: "Dépannage", desc: "Diagnostic à distance, tickets support, chat IA + technicien.",
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>,
+    icon: <WrenchIcon size={22} />,
     tint: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400",
   },
   {
     title: "En Boutique", desc: "Paiement sur place, retrait immédiat, conseils à Toamasina.",
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></svg>,
+    icon: <MapPinIcon size={22} />,
     tint: "bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400",
   },
   {
     title: "Garantie", desc: "Produits garantis, SAV inclus, Mobile Money (MVola, Orange, Airtel).",
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m12 3 2.5 6.5L21 10l-5 4.5L17.5 21 12 17.5 6.5 21 8 14.5 3 10l6.5-.5L12 3z" /></svg>,
+    icon: <AwardIcon size={22} />,
     tint: "bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400",
   },
 ];

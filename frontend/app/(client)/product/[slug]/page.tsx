@@ -139,7 +139,7 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-16 text-center text-slate-400">
+      <div className="mx-auto max-w-6xl px-4 py-16 text-center text-[var(--fg-muted)]">
         Chargement du produit...
       </div>
     );
@@ -148,10 +148,10 @@ export default function ProductDetailPage() {
   if (error || !product) {
     return (
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">
+        <h1 className="text-xl font-bold text-[var(--fg-primary)]">
           Produit introuvable
         </h1>
-        <p className="mt-2 text-slate-500">
+        <p className="mt-2 text-[var(--fg-secondary)]">
           {error || "Ce lien n'est plus valide ou le produit a été retiré."}
         </p>
         <Link href="/catalog" className="btn-primary mt-6 inline-flex">
@@ -167,7 +167,7 @@ export default function ProductDetailPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Fil d'Ariane */}
-      <nav className="mb-6 flex flex-wrap items-center gap-1 text-sm text-slate-500">
+      <nav className="mb-6 flex flex-wrap items-center gap-1 text-sm text-[var(--fg-secondary)]">
         <Link href="/" className="hover:text-primary-600">
           Accueil
         </Link>
@@ -176,7 +176,7 @@ export default function ProductDetailPage() {
           Catalogue
         </Link>
         <ChevronRightIcon size={14} />
-        <span className="line-clamp-1 text-slate-800 dark:text-slate-200">
+        <span className="line-clamp-1 text-[var(--fg-primary)]">
           {product.name}
         </span>
       </nav>
@@ -184,7 +184,7 @@ export default function ProductDetailPage() {
       <div className="grid gap-8 lg:grid-cols-2">
         {/* ✅ Galerie enrichie */}
         <div>
-          <div className="group relative card flex aspect-square items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+          <div className="group relative card flex aspect-square items-center justify-center overflow-hidden bg-[var(--bg-muted)]">
             <LazyImage
               src={images[activeImage]}
               alt={product.name}
@@ -251,11 +251,11 @@ export default function ProductDetailPage() {
 
         {/* Infos */}
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-slate-400">
+          <p className="text-sm font-medium uppercase tracking-wide text-[var(--fg-muted)]">
             {product.brand}
             {product.category_name ? ` · ${product.category_name}` : ""}
           </p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-50 sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold text-[var(--fg-primary)] sm:text-3xl">
             {product.name}
           </h1>
 
@@ -265,7 +265,7 @@ export default function ProductDetailPage() {
                 <StarIcon size={16} />
                 {product.rating.toFixed(1)}
                 {product.review_count ? (
-                  <span className="text-slate-400">
+                  <span className="text-[var(--fg-muted)]">
                     ({product.review_count})
                   </span>
                 ) : null}
@@ -276,7 +276,7 @@ export default function ProductDetailPage() {
                 Vedette
               </span>
             )}
-            <span className="text-xs text-slate-400">SKU {product.sku}</span>
+            <span className="text-xs text-[var(--fg-muted)]">SKU {product.sku}</span>
           </div>
 
           {(() => {
@@ -295,13 +295,13 @@ export default function ProductDetailPage() {
                   </p>
                 )}
                 <div className="mt-2 flex items-baseline gap-3">
-                  <span className="text-3xl font-bold text-primary-600 dark:text-primary-400">
+                  <span className="text-3xl font-bold text-[var(--fg-accent)]">
                     {formatAriary(finalPrice)}
                   </span>
                   {(hasPromo ||
                     (product.compare_at_price &&
                       product.compare_at_price > product.price)) && (
-                    <span className="text-lg text-slate-400 line-through">
+                    <span className="text-lg text-[var(--fg-muted)] line-through">
                       {formatAriary(
                         hasPromo
                           ? product.price
@@ -329,14 +329,14 @@ export default function ProductDetailPage() {
           </p>
 
           {product.short_description && (
-            <p className="mt-4 text-slate-600 dark:text-slate-300">
+            <p className="mt-4 text-[var(--fg-secondary)]">
               {product.short_description}
             </p>
           )}
 
           {/* Actions */}
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center rounded-lg border border-[var(--border)]">
               <button
                 type="button"
                 className="px-3 py-2 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -374,16 +374,16 @@ export default function ProductDetailPage() {
             <FavoriteButton
               product={product}
               size={22}
-              className="border border-slate-200 dark:border-slate-700"
+              className="border border-[var(--border)]"
             />
           </div>
 
           {/* Lien partagé visible */}
           <div className="mt-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-900/50">
-            <p className="text-xs font-medium uppercase text-slate-400">
+            <p className="text-xs font-medium uppercase text-[var(--fg-muted)]">
               Lien partageable
             </p>
-            <p className="mt-1 break-all font-mono text-xs text-slate-600 dark:text-slate-300">
+            <p className="mt-1 break-all font-mono text-xs text-[var(--fg-secondary)]">
               {typeof window !== "undefined"
                 ? `${window.location.origin}${sharePath}`
                 : sharePath}
@@ -411,10 +411,10 @@ export default function ProductDetailPage() {
       {/* Description longue */}
       {product.description && (
         <section className="card mt-10 p-6">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+          <h2 className="text-lg font-semibold text-[var(--fg-primary)]">
             Description
           </h2>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--fg-secondary)]">
             {product.description}
           </p>
         </section>
@@ -423,7 +423,7 @@ export default function ProductDetailPage() {
       {/* Attributs */}
       {product.attributes && Object.keys(product.attributes).length > 0 && (
         <section className="card mt-6 p-6">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+          <h2 className="text-lg font-semibold text-[var(--fg-primary)]">
             Caractéristiques
           </h2>
           <dl className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -432,8 +432,8 @@ export default function ProductDetailPage() {
                 key={k}
                 className="flex justify-between gap-4 border-b border-slate-100 py-2 text-sm dark:border-slate-800"
               >
-                <dt className="text-slate-500">{k}</dt>
-                <dd className="font-medium text-slate-800 dark:text-slate-200">
+                <dt className="text-[var(--fg-secondary)]">{k}</dt>
+                <dd className="font-medium text-[var(--fg-primary)]">
                   {String(v)}
                 </dd>
               </div>
