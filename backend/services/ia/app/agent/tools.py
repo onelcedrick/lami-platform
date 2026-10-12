@@ -217,16 +217,17 @@ class ToolRegistry:
         auth_token: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> Any:
-        # ✅ Recherche multi-termes selon la catégorie
-        CATEGORY_SEARCH = {
-            "Stockage": "SSD",
-            "CPU": "Ryzen Intel",
-            "GPU": "RTX GeForce",
-            "RAM": "DDR",
-            "Alimentation": "alimentation",
-            "Carte mere": "carte mere",
-            "Boitier": "boitier",
-            "Refroidissement": "ventirad",
+        # ✅ Mapping category → category_id (UUID)
+        CATEGORY_ID_MAP = {
+            "CPU": "0fb46772-f12e-4e8f-a494-d520c13c4637",
+            "GPU": "435f979b-efa0-4ad6-8ae0-4243b90a4c40",
+            "RAM": "580e0ae9-0b0c-44d7-9cb5-2c1847bbfb9b",
+            "Stockage": "cd894b65-2f96-441e-9224-50ddb34f81bc",
+            "Carte mere": "36fd69e9-8f94-4ff9-bd19-4b0b02ed7f69",
+            "Alimentation": "1c34817e-5a8d-451c-b581-7d5e0aace94a",
+            "Boitier": "25fb979f-d83f-47df-bf13-86a66227f89d",
+            "Refroidissement": "4a350d5b-f978-48b1-833e-5054bde0e1cc",
+            "Ecrans": "0fc32b07-be95-41ec-b73d-6740d1e3600d",
         }
 
         params: dict[str, Any] = {"limit": args.get("limit", 5)}
@@ -234,12 +235,16 @@ class ToolRegistry:
         category = (args.get("category") or "").strip()
 
         if category:
-            # Utiliser le terme dédié à la catégorie
-            cat_term = CATEGORY_SEARCH.get(category, category)
-            if search_term:
-                params["search"] = f"{search_term} {cat_term}"
+            # ✅ Utiliser category_id (plus fiable que search)
+            cat_id = CATEGORY_ID_MAP.get(category)
+            if cat_id:
+                params["category_id"] = cat_id
+                # Ajouter le search en bonus si présent
+                if search_term:
+                    params["search"] = search_term
             else:
-                params["search"] = cat_term
+                # Fallback : search sur le nom de catégorie
+                params["search"] = search_term or category
         elif search_term:
             params["search"] = search_term
 
@@ -265,6 +270,8 @@ class ToolRegistry:
                         "rating": p.get("rating"),
                         "image": images[0] if images else None,
                         "usage_tags": p.get("usage_tags", []),
+                        "sku": p.get("sku"),
+                        "category_id": p.get("category_id"),
                     }
                 )
 
@@ -412,55 +419,127 @@ class ToolRegistry:
                 products.append(p)
 
         def match_slot(p: dict, slot: str) -> bool:
-            blob = " ".join([
-                str(p.get("name") or ""),
-                str(p.get("brand") or ""),
-                " ".join(p.get("usage_tags") or []),
-                str(p.get("category_name") or ""),
-                str(p.get("sku") or ""),
-            ]).lower()
-            keys = {
-                "CPU": ["cpu", "ryzen", "intel", "core i", "processeur"],
-                "GPU": ["gpu", "rtx", "gtx", "radeon", "geforce", "carte graphique"],
-                "RAM": ["ram", "ddr4", "ddr5", "memoire"],
-                "Stockage": ["ssd", "hdd", "nvme", "stockage"],
-                "Carte mere": ["carte mere", "motherboard", "b550", "b650", "z790"],
-                "Alimentation": ["psu", "alimentation", "watt"],
-                "Boitier": ["boitier", "case", "tower"],
-                "Ecrans": ["ecran", "monitor", "afficheur"],
-            }.get(slot, [slot.lower()])
-            return any(k in blob for k in keys)
+            """Identifie si un produit correspond a un slot donne.
+            Utilise UNIQUEMENT le SKU et le category_id (pas le nom, trop ambigu).
+            """
+            # ✅ Priorite 1 : SKU (tres fiable)
+            sku = str(p.get("sku") or "").lower()
+            sku_prefixes = {
+                "CPU": ["cpu-", "proc-", "inte-"],
+                "GPU": ["gpu-", "vga-", "video-card-"],
+                "RAM": ["ram-", "mem-", "memo-"],
+                "Stockage": ["ssd-", "hdd-", "sto-", "nvme-", "exte-"],
+                "Carte mere": ["mb-", "mobo-", "motherboard-", "moth-"],
+                "Alimentation": ["psu-", "alim-", "power-", "powe-"],
+                "Boitier": ["case-", "boit-"],
+                "Ecrans": ["mon-", "moni-", "scr-"],
+                "Claviers": ["keyb-", "clav-"],
+                "Souris": ["mous-", "sour-"],
+                "Audio": ["soun-", "spea-", "head-"],
+            }.get(slot, [])
+            if sku and any(sku.startswith(p) for p in sku_prefixes):
+                return True
 
-        # ✅ ALGORITHME BUDGET-AWARE avec backtracking
-        priority_order = [
-            "CPU", "GPU", "RAM", "Stockage",
-            "Carte mere", "Alimentation", "Boitier", "Ecrans",
+            # ✅ Priorite 2 : category_id (fallback fiable)
+            expected_cat_id = {
+                "CPU": "0fb46772-f12e-4e8f-a494-d520c13c4637",
+                "GPU": "435f979b-efa0-4ad6-8ae0-4243b90a4c40",
+                "RAM": "580e0ae9-0b0c-44d7-9cb5-2c1847bbfb9b",
+                "Stockage": "cd894b65-2f96-441e-9224-50ddb34f81bc",
+                "Carte mere": "36fd69e9-8f94-4ff9-bd19-4b0b02ed7f69",
+                "Alimentation": "1c34817e-5a8d-451c-b581-7d5e0aace94a",
+                "Boitier": "25fb979f-d83f-47df-bf13-86a66227f89d",
+                "Ecrans": "0fc32b07-be95-41ec-b73d-6740d1e3600d",
+            }.get(slot, "")
+            if expected_cat_id and str(p.get("category_id") or "") == expected_cat_id:
+                return True
+
+            # PAS de fallback par nom (source de faux positifs)
+            return False
+
+        # ✅ ALGORITHME BUDGET-AWARE v2 (corrige)
+        #
+        # Principe :
+        # 1. Trier les slots par PRIORITE d'usage (GPU avant boitier, etc.)
+        # 2. Pour chaque slot, chercher les candidats <= allocation cible
+        # 3. Trier les candidats par PROXIMITE a l'allocation (ni trop cher, ni trop cheap)
+        # 4. Backtracking avec reserve minimale (100k Ar par slot restant)
+        #
+        # ✅ Ordre optimal par usage (le + critique en premier)
+        # Pour gaming : GPU AVANT CPU (le GPU fait 60% des perfs)
+        # Pour bureautique/montage : CPU + RAM en priorite
+        priority_map = {
+            "gaming":        ["GPU", "CPU", "RAM", "Stockage", "Carte mere", "Alimentation", "Boitier"],
+            "bureautique":   ["CPU", "RAM", "Stockage", "Carte mere", "Alimentation", "Boitier"],
+            "montage video": ["CPU", "GPU", "RAM", "Stockage", "Carte mere", "Alimentation", "Boitier"],
+            "creation":      ["CPU", "GPU", "RAM", "Stockage", "Carte mere", "Alimentation", "Boitier"],
+        }
+        ordered_slots = [
+            s for s in priority_map.get(usage, priority_map["gaming"])
+            if s in slots
         ]
-        ordered_slots = [s for s in priority_order if s in slots]
 
-        def build_recursive(slot_idx: int, remaining: float, current: list) -> Optional[list]:
-            """Essaie de remplir les slots en respectant le budget restant."""
+        # Budget minimum vital par slot (en Ar) pour eviter les composants a 10k Ar
+        MIN_SLOT_PRICE = {
+            "CPU": 200_000,
+            "GPU": 300_000,
+            "RAM": 80_000,
+            "Stockage": 50_000,
+            "Carte mere": 100_000,
+            "Alimentation": 80_000,
+            "Boitier": 50_000,
+            "Ecrans": 100_000,
+        }
+
+        def build_recursive(
+            slot_idx: int,
+            remaining: float,
+            current: list,
+        ) -> Optional[list]:
+            """
+            Essaie de remplir les slots en respectant le budget restant.
+            Utilise un backtracking avec reserve minimale.
+            """
             if slot_idx >= len(ordered_slots):
                 return current
 
             slot = ordered_slots[slot_idx]
 
+            # Reserve minimale pour les slots restants (evite de tout depenser)
+            restants = ordered_slots[slot_idx + 1:]
+            reserve = sum(MIN_SLOT_PRICE.get(s, 50_000) for s in restants)
+
+            # Allocation cible pour ce slot (proportionnelle au budget initial)
+            alloc_cible = slots.get(slot, 0.10) * budget
+
+            # Candidats : produits du bon type, prix <= (remaining - reserve)
+            # ✅ Tolerance GPU : on autorise jusqu'a 110% de l'allocation cible
+            dispo = remaining - reserve
+            if slot == "GPU":
+                dispo = min(dispo, alloc_cible * 1.3)
             candidates = [
                 p for p in products
-                if match_slot(p, slot) and float(p.get("price") or 0) <= remaining
+                if match_slot(p, slot)
+                and MIN_SLOT_PRICE.get(slot, 0) <= float(p.get("price") or 0) <= dispo
             ]
-            candidates.sort(key=lambda p: float(p.get("price") or 0), reverse=True)
 
-            for chosen in candidates:
+            if not candidates:
+                # Pas de candidat pour ce slot → on continue sans
+                return build_recursive(slot_idx + 1, remaining, current)
+
+            # Trier par proximite a l'allocation cible (ni trop cher, ni trop cheap)
+            # Score = distance relative a l'allocation cible
+            def score(p: dict) -> float:
+                price = float(p.get("price") or 0)
+                # On prefere les produits proches de l'allocation, mais un peu en dessous
+                target = alloc_cible * 0.9  # 90% de l'allocation = ideal
+                return abs(price - target)
+
+            candidates.sort(key=score)
+
+            # Essayer le top 5 des candidats (backtracking limite)
+            for chosen in candidates[:5]:
                 price = float(chosen.get("price") or 0)
-                # Vérifier qu'il reste assez pour les slots suivants
-                min_needed = sum(
-                    slots.get(s, 0) * budget * 0.5
-                    for s in ordered_slots[slot_idx + 1:]
-                )
-                if remaining - price < min_needed * 0.3:
-                    continue
-
                 build_item = {
                     "slot": slot,
                     "id": chosen.get("id"),
@@ -477,7 +556,7 @@ class ToolRegistry:
                 if result is not None:
                     return result
 
-            # Aucun candidat → on continue sans ce slot
+            # Fallback : essayer sans ce slot
             return build_recursive(slot_idx + 1, remaining, current)
 
         build = build_recursive(0, budget, [])

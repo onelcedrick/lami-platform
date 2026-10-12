@@ -103,11 +103,11 @@ export default function AdminAnalyticsPage() {
           </p>
         ) : (
           <div className="mt-6 flex items-end gap-1.5 overflow-x-auto pb-2" style={{ minHeight: 160 }}>
-            {data.daily.map((d) => {
+            {data.daily.map((d, i) => {
               const h = Math.max(4, Math.round((d.page_views / maxViews) * 120));
               return (
                 <div
-                  key={d.date}
+                  key={`${d.date}-${i}`}
                   className="flex min-w-[36px] flex-1 flex-col items-center gap-1"
                   title={`${d.date}: ${d.unique_visitors} uniques, ${d.page_views} vues`}
                 >

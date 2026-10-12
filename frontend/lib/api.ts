@@ -344,9 +344,122 @@ export const api = {
   // -------------------------------------------------------------------------
   visitorStats: (days = 7) =>
     request(`/api/v1/analytics/visitors?days=${days}`),
+  // -------------------------------------------------------------------------
+  // Avatar (upload + suppression)
+  // -------------------------------------------------------------------------
+  uploadAvatar: async (file: File) => {
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    const headers: HeadersInit = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const res = await fetch(`${API_BASE}/api/v1/users/me/avatar`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    return (await res.json()) as ApiResponse<{ avatar_url: string }>;
+  },
+
+  deleteAvatar: () =>
+    request<{ success: boolean }>("/api/v1/users/me/avatar", {
+      method: "DELETE",
+    }),
+
+
 
   activityLogs: (params?: { page?: number; limit?: number; category?: string; actor_id?: string }) =>
     request(`/api/v1/analytics/events${qs(params as any)}`),
 };
 
 
+
+// ============================================================
+// AJOUT : Gestion avancee des categories
+// ============================================================
+
+export interface CategoryDetail {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  parent_id?: string | null;
+  order?: number;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CategoryWithStats extends CategoryDetail {
+  product_count?: number;
+}
+
+// Étendre l'objet api existant
+export const categoryApi = {
+  // PUT /categories/:id
+  update: (id: string, body: { name: string; description?: string }) =>
+    request<CategoryDetail>(`/api/v1/catalog/categories/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  // DELETE /categories/:id?reassign_to=xxx
+  delete: (id: string, reassignTo?: string) => {
+    const qs = reassignTo ? `?reassign_to=${encodeURIComponent(reassignTo)}` : "";
+    return request<{ products_reassigned: number }>(
+      `/api/v1/catalog/categories/${id}${qs}`,
+      { method: "DELETE" }
+    );
+  },
+
+  // POST /categories/:id/merge
+  merge: (fromId: string, targetId: string) =>
+    request<{ products_moved: number }>(
+      `/api/v1/catalog/categories/${fromId}/merge`,
+      {
+        method: "POST",
+        body: JSON.stringify({ target_id: targetId }),
+      }
+    ),
+
+  // GET /categories/:id/products
+  products: (id: string, page = 1, limit = 20) =>
+    request(`/api/v1/catalog/categories/${id}/products?page=${page}&limit=${limit}`),
+};
+
+// ============================================================
+// AJOUT : Upload / suppression d'avatar
+// ============================================================
+
+export const avatarApi = {
+  // POST /users/me/avatar (multipart)
+  upload: async (file: File) => {
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+
+    const headers: HeadersInit = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const res = await fetch(`${API_BASE}/api/v1/users/me/avatar`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    return (await res.json()) as ApiResponse<{ avatar_url: string }>;
+  },
+
+  // DELETE /users/me/avatar
+  delete: () =>
+    request<{ success: boolean }>("/api/v1/users/me/avatar", {
+      method: "DELETE",
+    }),
+};

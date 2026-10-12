@@ -31,6 +31,8 @@ type CategoryRepository interface {
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context) ([]shareddomain.Category, error)
 	ListTree(ctx context.Context) ([]shareddomain.Category, error)
+	CountProducts(ctx context.Context, categoryID string) (int64, error)
+	ReassignProducts(ctx context.Context, fromCategoryID, toCategoryID string) (int64, error)
 }
 
 type DiscountRepository interface {

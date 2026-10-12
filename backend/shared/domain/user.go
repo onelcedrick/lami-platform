@@ -15,15 +15,17 @@ const (
 
 // Address enrichie pour GEO Madagascar (cahier + memo Toamasina)
 type Address struct {
-	Street     string  `json:"street" bson:"street"`
-	City       string  `json:"city" bson:"city"`
-	PostalCode string  `json:"postal_code" bson:"postal_code"`
-	Region     string  `json:"region,omitempty" bson:"region,omitempty"`     // ex: Haute Matsiatra
-	Province   string  `json:"province,omitempty" bson:"province,omitempty"` // ex: Toamasina
-	Country    string  `json:"country" bson:"country"`                       // Madagascar
-	CountryCode string `json:"country_code,omitempty" bson:"country_code,omitempty"` // MG
-	Latitude   *float64 `json:"latitude,omitempty" bson:"latitude,omitempty"`
-	Longitude  *float64 `json:"longitude,omitempty" bson:"longitude,omitempty"`
+	Street      string   `json:"street" bson:"street"`
+	City        string   `json:"city" bson:"city"`
+	PostalCode  string   `json:"postal_code,omitempty" bson:"postal_code,omitempty"`
+	State       string   `json:"state,omitempty" bson:"state,omitempty"`
+	Region      string   `json:"region,omitempty" bson:"region,omitempty"`
+	Province    string   `json:"province,omitempty" bson:"province,omitempty"`
+	Country     string   `json:"country" bson:"country"`
+	CountryCode string   `json:"country_code,omitempty" bson:"country_code,omitempty"`
+	Phone       string   `json:"phone,omitempty" bson:"phone,omitempty"`
+	Latitude    *float64 `json:"latitude,omitempty" bson:"latitude,omitempty"`
+	Longitude   *float64 `json:"longitude,omitempty" bson:"longitude,omitempty"`
 }
 
 type User struct {

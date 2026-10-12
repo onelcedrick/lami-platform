@@ -586,3 +586,133 @@ func (s *CatalogService) FindCategoryIDByName(ctx context.Context, name string) 
 	}
 	return "", errors.New("categorie introuvable: " + name)
 }
+
+// ============================================================
+// AJOUT : Gestion avancee des categories (Update, Delete, Merge)
+// ============================================================
+
+// UpdateCategory met a jour le nom et la description d'une categorie.
+func (s *CatalogService) UpdateCategory(
+	ctx context.Context,
+	id string,
+	name string,
+	description string,
+) (*shareddomain.Category, error) {
+	if strings.TrimSpace(name) == "" {
+		return nil, errors.New("le nom de la categorie est obligatoire")
+	}
+
+	existing, err := s.categoryRepo.FindByID(ctx, id)
+	if err != nil || existing == nil {
+		return nil, errors.New("categorie introuvable")
+	}
+
+	existing.Name = strings.TrimSpace(name)
+	existing.Description = description
+	existing.Slug = slugify(existing.Name)
+	existing.UpdatedAt = time.Now().UTC()
+
+	if err := s.categoryRepo.Update(ctx, existing); err != nil {
+		return nil, fmt.Errorf("mise a jour impossible: %w", err)
+	}
+
+	logger.Info().Str("category_id", id).Str("name", existing.Name).Msg("Categorie mise a jour")
+	return existing, nil
+}
+
+// DeleteCategory supprime une categorie.
+// Si la categorie contient des produits, `reassignTo` est obligatoire.
+// Retourne le nombre de produits reaffectes.
+func (s *CatalogService) DeleteCategory(
+	ctx context.Context,
+	id string,
+	reassignTo string,
+) (int64, error) {
+	existing, err := s.categoryRepo.FindByID(ctx, id)
+	if err != nil || existing == nil {
+		return 0, errors.New("categorie introuvable")
+	}
+
+	// Compter les produits
+	count, err := s.categoryRepo.CountProducts(ctx, id)
+	if err != nil {
+		return 0, fmt.Errorf("impossible de compter les produits: %w", err)
+	}
+
+	// Si des produits existent, reaffectation obligatoire
+	if count > 0 {
+		if reassignTo == "" {
+			return 0, fmt.Errorf(
+				"cette categorie contient %d produit(s). "+
+					"Indiquez une categorie de reaffectation.", count)
+		}
+
+		if reassignTo == id {
+			return 0, errors.New("impossible de reaffecter vers la meme categorie")
+		}
+
+		target, err := s.categoryRepo.FindByID(ctx, reassignTo)
+		if err != nil || target == nil {
+			return 0, errors.New("categorie cible introuvable")
+		}
+
+		moved, err := s.categoryRepo.ReassignProducts(ctx, id, reassignTo)
+		if err != nil {
+			return 0, fmt.Errorf("reaffectation echouee: %w", err)
+		}
+
+		logger.Info().
+			Str("from", id).
+			Str("to", reassignTo).
+			Int64("moved", moved).
+			Msg("Produits reaffectes")
+	}
+
+	if err := s.categoryRepo.Delete(ctx, id); err != nil {
+		return 0, fmt.Errorf("suppression echouee: %w", err)
+	}
+
+	logger.Info().Str("category_id", id).Msg("Categorie supprimee")
+	return count, nil
+}
+
+// MergeCategories deplace tous les produits de `fromID` vers `toID`,
+// puis supprime `fromID`. Retourne le nombre de produits deplaces.
+func (s *CatalogService) MergeCategories(
+	ctx context.Context,
+	fromID string,
+	toID string,
+) (int64, error) {
+	if fromID == toID {
+		return 0, errors.New("les categories source et cible doivent etre differentes")
+	}
+
+	source, err := s.categoryRepo.FindByID(ctx, fromID)
+	if err != nil || source == nil {
+		return 0, errors.New("categorie source introuvable")
+	}
+
+	target, err := s.categoryRepo.FindByID(ctx, toID)
+	if err != nil || target == nil {
+		return 0, errors.New("categorie cible introuvable")
+	}
+
+	moved, err := s.categoryRepo.ReassignProducts(ctx, fromID, toID)
+	if err != nil {
+		return 0, fmt.Errorf("fusion echouee: %w", err)
+	}
+
+	if err := s.categoryRepo.Delete(ctx, fromID); err != nil {
+		return 0, fmt.Errorf("suppression source echouee: %w", err)
+	}
+
+	logger.Info().
+		Str("from", fromID).
+		Str("from_name", source.Name).
+		Str("to", toID).
+		Str("to_name", target.Name).
+		Int64("moved", moved).
+		Msg("Categories fusionnees")
+
+	return moved, nil
+}

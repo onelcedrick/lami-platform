@@ -425,3 +425,99 @@ func (h *CatalogHandler) UploadMultipleImages(c *fiber.Ctx) error {
 		"errors":   errorsList,
 	})
 }
+
+// ============================================================
+// AJOUT : Handlers gestion avancee des categories
+// ============================================================
+
+// UpdateCategory - PUT /api/v1/catalog/categories/:id
+func (h *CatalogHandler) UpdateCategory(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return response.ValidationError(c, "id obligatoire")
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return response.ValidationError(c, "corps de requete invalide")
+	}
+
+	category, err := h.service.UpdateCategory(c.Context(), id, req.Name, req.Description)
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Categorie mise a jour", category)
+}
+
+// DeleteCategory - DELETE /api/v1/catalog/categories/:id?reassign_to=xxx
+func (h *CatalogHandler) DeleteCategory(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return response.ValidationError(c, "id obligatoire")
+	}
+
+	reassignTo := c.Query("reassign_to")
+
+	count, err := h.service.DeleteCategory(c.Context(), id, reassignTo)
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Categorie supprimee", fiber.Map{
+		"products_reassigned": count,
+	})
+}
+
+// MergeCategories - POST /api/v1/catalog/categories/:id/merge
+func (h *CatalogHandler) MergeCategories(c *fiber.Ctx) error {
+	fromID := c.Params("id")
+	if fromID == "" {
+		return response.ValidationError(c, "id source obligatoire")
+	}
+
+	var req struct {
+		TargetID string `json:"target_id"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.TargetID == "" {
+		return response.ValidationError(c, "target_id obligatoire")
+	}
+
+	moved, err := h.service.MergeCategories(c.Context(), fromID, req.TargetID)
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Categories fusionnees", fiber.Map{
+		"products_moved": moved,
+	})
+}
+
+// GetCategoryProducts - GET /api/v1/catalog/categories/:id/products
+func (h *CatalogHandler) GetCategoryProducts(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return response.ValidationError(c, "id obligatoire")
+	}
+
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+
+	products, total, err := h.service.ListProducts(c.Context(), shareddomain.ProductFilter{
+		CategoryID: id,
+		Page:       page,
+		Limit:      limit,
+	})
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.SuccessWithMeta(c, fiber.StatusOK, "Produits de la categorie", products, fiber.Map{
+		"page":  page,
+		"limit": limit,
+		"total": total,
+	})
+}

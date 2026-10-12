@@ -38,6 +38,12 @@ func SetupRoutes(app *fiber.App, handler *CatalogHandler, jwtSecret string) {
 	// --- Catégories (admin) ---
 	api.Post("/categories", adminMiddleware[0], adminMiddleware[1], handler.CreateCategory)
 
+	// ✅ NOUVEAU : Gestion avancee des categories
+	api.Put("/categories/:id", adminMiddleware[0], adminMiddleware[1], handler.UpdateCategory)
+	api.Delete("/categories/:id", adminMiddleware[0], adminMiddleware[1], handler.DeleteCategory)
+	api.Post("/categories/:id/merge", adminMiddleware[0], adminMiddleware[1], handler.MergeCategories)
+	api.Get("/categories/:id/products", handler.GetCategoryProducts)
+
 	// --- Seed (admin) ---
 	api.Post("/seed", adminMiddleware[0], adminMiddleware[1], handler.Seed)
 

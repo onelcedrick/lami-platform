@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { logActivity } from "@/lib/analytics";
 import { useAuthStore } from "@/lib/store";
-import { LogoIcon } from "@/components/ui/icons";
+import DynamicLogo from "@/components/ui/DynamicLogo";
 import AnimatedSection from "@/components/ui/AnimatedSection";
 import PasswordInput from "@/components/ui/PasswordInput";
 
@@ -71,7 +71,7 @@ export default function RegisterPage() {
         {/* Header avec logo encadre */}
         <div className="mb-8 text-center">
           <div className="inline-flex items-center justify-center rounded-2xl bg-[var(--bg-surface)] p-3 shadow-sm dark:border dark:border-[var(--border)]">
-            <LogoIcon size={48} />
+            <DynamicLogo variant="full" size={48} />
           </div>
           <h1 className="mt-6 text-2xl font-bold tracking-tight text-[var(--fg-primary)]">
             Inscription

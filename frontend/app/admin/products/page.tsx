@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSettingsStore } from "@/lib/settings-store";
 import { api } from "@/lib/api";
 import { formatAriary } from "@/lib/currency";
 import { logActivity } from "@/lib/analytics";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ProductImportModal from "@/components/admin/ProductImportModal";
-import ImageUploader from "@/components/admin/ImageUploader";
-import AttributesEditor from "@/components/admin/AttributesEditor";
+import ProductEditModalAdapter from "@/components/admin/ProductEditModalAdapter";
 import LazyImage from "@/components/ui/LazyImage";
 
 interface Category {
@@ -54,6 +55,7 @@ type FormState = {
   images: string;
   tags: string;
   usage_tags: string;
+  status: string;
   is_featured: boolean;
   attributes: Record<string, string | number | boolean>;
 };
@@ -72,6 +74,7 @@ const emptyForm = (): FormState => ({
   images: "",
   tags: "",
   usage_tags: "",
+  status: "active",
   is_featured: false,
   attributes: {},
 });
@@ -92,6 +95,7 @@ function productToForm(p: Product): FormState {
     images: (p.images || []).join("\n"),
     tags: (p.tags || []).join(", "),
     usage_tags: (p.usage_tags || []).join(", "),
+    status: p.status || "active",
     is_featured: !!p.is_featured,
     attributes:
       (p.attributes as Record<string, string | number | boolean>) || {},
@@ -130,12 +134,15 @@ function formToPayload(f: FormState) {
     images,
     tags,
     usage_tags,
+    status: f.status || "active",
     is_featured: f.is_featured,
     attributes: f.attributes || {},
   };
 }
 
 export default function AdminProductsPage() {
+  const router = useRouter();
+  const productFormMode = useSettingsStore((s) => s.productFormMode);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,6 +210,13 @@ export default function AdminProductsPage() {
   const outCount = products.filter((p) => p.stock <= 0).length;
 
   const openCreate = () => {
+    // Si le mode wizard est active, rediriger vers la page dediee
+    if (productFormMode === "wizard") {
+      router.push("/admin/products/new");
+      return;
+    }
+
+    // Mode classic : ouvrir le modal
     setEditing(null);
     setForm({
       ...emptyForm(),
@@ -337,8 +351,9 @@ export default function AdminProductsPage() {
   const catNameById = (id: string) =>
     categories.find((c) => c.id === id)?.name || "—";
 
-  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const setField = (key: string, value: unknown) => {
+    setForm((prev) => ({ ...prev, [key]: value }) as FormState);
+  };
 
   return (
     <div>
@@ -574,242 +589,16 @@ export default function AdminProductsPage() {
         </table>
       </div>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8">
-          <div className="card w-full max-w-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">
-                {editing ? "Modifier le produit" : "Nouveau produit"}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                Fermer
-              </button>
-            </div>
-
-            {error && (
-              <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSave} className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Nom *
-                </label>
-                <input
-                  className="input-field"
-                  value={form.name}
-                  onChange={(e) => setField("name", e.target.value)}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  SKU *
-                </label>
-                <input
-                  className="input-field"
-                  value={form.sku}
-                  onChange={(e) => setField("sku", e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Marque *
-                </label>
-                <input
-                  className="input-field"
-                  value={form.brand}
-                  onChange={(e) => setField("brand", e.target.value)}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Categorie *
-                </label>
-                <select
-                  className="input-field"
-                  value={form.category_id}
-                  onChange={(e) => setField("category_id", e.target.value)}
-                  required
-                >
-                  <option value="">Selectionner...</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Prix (Ariary) *
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  className="input-field"
-                  value={form.price}
-                  onChange={(e) => setField("price", e.target.value)}
-                  placeholder="ex: 1800000"
-                  required
-                />
-                {form.price && Number(form.price) > 0 && (
-                  <p className="mt-1 text-xs text-primary-600">
-                    {formatAriary(Number(form.price))}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Prix compare (Ar)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  className="input-field"
-                  value={form.compare_at_price}
-                  onChange={(e) => setField("compare_at_price", e.target.value)}
-                  placeholder="Ancien prix barre"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">
-                    Stock *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    className="input-field"
-                    value={form.stock}
-                    onChange={(e) => setField("stock", e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">
-                    Alerte stock
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    className="input-field"
-                    value={form.stock_alert}
-                    onChange={(e) => setField("stock_alert", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Description courte
-                </label>
-                <input
-                  className="input-field"
-                  value={form.short_description}
-                  onChange={(e) => setField("short_description", e.target.value)}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Description
-                </label>
-                <textarea
-                  className="input-field min-h-[80px]"
-                  value={form.description}
-                  onChange={(e) => setField("description", e.target.value)}
-                />
-              </div>
-
-              {/* 📸 Upload d'images */}
-              <div className="sm:col-span-2">
-                <ImageUploader
-                  value={form.images
-                    .split("\n")
-                    .map((s) => s.trim())
-                    .filter(Boolean)}
-                  onChange={(urls) => setField("images", urls.join("\n"))}
-                  max={8}
-                  maxSizeMB={5}
-                  label="Photos du produit"
-                />
-              </div>
-
-              {/* ⚙️ Caractéristiques dynamiques */}
-              <div className="sm:col-span-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <AttributesEditor
-                  key={editing?.id ?? "new"}
-                  value={form.attributes}
-                  onChange={(attrs) => setField("attributes", attrs)}
-                  label="Caractéristiques techniques"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Tags (virgules)
-                </label>
-                <input
-                  className="input-field"
-                  value={form.tags}
-                  onChange={(e) => setField("tags", e.target.value)}
-                  placeholder="ssd, nvme"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
-                  Usage tags
-                </label>
-                <input
-                  className="input-field"
-                  value={form.usage_tags}
-                  onChange={(e) => setField("usage_tags", e.target.value)}
-                  placeholder="gaming, bureautique"
-                />
-              </div>
-
-              <div className="sm:col-span-2 flex items-center gap-2">
-                <input
-                  id="featured"
-                  type="checkbox"
-                  checked={form.is_featured}
-                  onChange={(e) => setField("is_featured", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                <label htmlFor="featured" className="text-sm text-slate-700 dark:text-slate-300">
-                  Produit vedette (accueil / popularite)
-                </label>
-              </div>
-
-              <div className="sm:col-span-2 flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="btn-secondary"
-                >
-                  Annuler
-                </button>
-                <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
-                  {saving ? "Enregistrement..." : editing ? "Enregistrer" : "Creer"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ProductEditModalAdapter
+        open={modalOpen}
+        editing={!!editing}
+        form={form}
+        categories={categories}
+        error={error}
+        onChange={setField}
+        onClose={() => setModalOpen(false)}
+        onSubmit={handleSave}
+      />
 
       {catModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

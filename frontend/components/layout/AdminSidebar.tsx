@@ -1,83 +1,220 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuthStore } from "@/lib/store";
+import { api } from "@/lib/api";
+import SidebarSection from "./SidebarSection";
+import SidebarItem from "./SidebarItem";
+import DynamicLogo from "@/components/ui/DynamicLogo";
 import {
   LogoIcon,
-  CpuIcon,
-  TicketIcon,
-  CartIcon,
-  UserIcon,
-  StarIcon,
+  LayoutDashboardIcon,
+  ShoppingBagIcon,
+  LifeBuoyIcon,
+  PackageIcon,
+  FolderIcon,
+  TagIcon,
+  UsersIcon,
+  UserCogIcon,
+  EyeIcon,
+  BarChartIcon,
+  FileTextIcon,
+  SettingsIcon,
+  StoreIcon,
   LogoutIcon,
 } from "@/components/ui/icons";
 
-const links = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: CpuIcon },
-  { href: "/admin/products", label: "Produits", icon: CpuIcon },
-  { href: "/admin/discounts", label: "Promotions", icon: StarIcon },
-  { href: "/admin/orders", label: "Commandes", icon: CartIcon },
-  { href: "/admin/tickets", label: "Tickets", icon: TicketIcon },
-  { href: "/admin/users", label: "Utilisateurs", icon: UserIcon },
-  { href: "/admin/analytics", label: "Visiteurs", icon: CpuIcon },
-  { href: "/admin/reports", label: "Rapports CA", icon: CartIcon },
-  { href: "/admin/settings", label: "Boutique", icon: CpuIcon },
-  { href: "/admin/logs", label: "Journal", icon: TicketIcon },
-];
-
 export default function AdminSidebar() {
-  const pathname = usePathname();
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+
+  const [counts, setCounts] = useState({
+    pendingOrders: 0,
+    openTickets: 0,
+  });
+
+  // Charger les compteurs
+  useEffect(() => {
+    async function loadCounts() {
+      try {
+        const [ordersRes, ticketsRes] = await Promise.all([
+          api.listOrders({ limit: 100 }),
+          api.listTickets({ limit: 100 }),
+        ]);
+
+        const pendingOrders =
+          ordersRes.success && ordersRes.data
+            ? (ordersRes.data as Array<{ status: string }>).filter(
+                (o) => o.status === "pending" || o.status === "confirmed"
+              ).length
+            : 0;
+
+        const openTickets =
+          ticketsRes.success && ticketsRes.data
+            ? (ticketsRes.data as Array<{ status: string }>).filter(
+                (t) => t.status === "open" || t.status === "in_progress"
+              ).length
+            : 0;
+
+        setCounts({ pendingOrders, openTickets });
+      } catch {
+        // silent
+      }
+    }
+    loadCounts();
+  }, []);
 
   const handleLogout = () => {
     logout();
     router.push("/login");
   };
 
+  const initials = user
+    ? `${user.first_name?.[0] || ""}${user.last_name?.[0] || ""}`.toUpperCase() ||
+      user.email[0].toUpperCase()
+    : "A";
+
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      {/* Header */}
-      <div className="flex h-16 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
-        <LogoIcon size={28} />
-        <span className="font-bold text-slate-900 dark:text-slate-100">
-          Admin
-        </span>
+    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-surface)]">
+      {/* ============================================ */}
+      {/* Header - Branding                            */}
+      {/* ============================================ */}
+      <div className="border-b border-[var(--border)] px-4 py-4">
+        <Link href="/admin/dashboard" className="block">
+          <DynamicLogo variant="icon" size={36} className="h-10 w-auto" />
+        </Link>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-1 p-3">
-        {links.map((link) => {
-          const active = pathname.startsWith(link.href);
-          const Icon = link.icon;
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                active
-                  ? "bg-primary-50 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-              }`}
-            >
-              <Icon size={18} />
-              {link.label}
-            </Link>
-          );
-        })}
+      {/* ============================================ */}
+      {/* Navigation                                   */}
+      {/* ============================================ */}
+      <nav className="flex-1 overflow-y-auto py-2">
+        {/* PRINCIPAL */}
+        <SidebarSection title="Principal">
+          <SidebarItem
+            href="/admin/dashboard"
+            label="Dashboard"
+            icon={<LayoutDashboardIcon size={18} />}
+            exact
+          />
+          <SidebarItem
+            href="/admin/orders"
+            label="Commandes"
+            icon={<ShoppingBagIcon size={18} />}
+            badge={counts.pendingOrders || undefined}
+            badgeColor="warning"
+          />
+          <SidebarItem
+            href="/admin/tickets"
+            label="Tickets"
+            icon={<LifeBuoyIcon size={18} />}
+            badge={counts.openTickets || undefined}
+            badgeColor={counts.openTickets > 5 ? "danger" : "warning"}
+          />
+        </SidebarSection>
+
+        {/* CATALOGUE */}
+        <SidebarSection title="Catalogue">
+          <SidebarItem
+            href="/admin/products"
+            label="Produits"
+            icon={<PackageIcon size={18} />}
+          />
+          <SidebarItem
+            href="/admin/categories"
+            label="Catégories"
+            icon={<FolderIcon size={18} />}
+          />
+          <SidebarItem
+            href="/admin/discounts"
+            label="Promotions"
+            icon={<TagIcon size={18} />}
+          />
+        </SidebarSection>
+
+        {/* UTILISATEURS */}
+        <SidebarSection title="Utilisateurs">
+          <SidebarItem
+            href="/admin/users"
+            label="Clients"
+            icon={<UsersIcon size={18} />}
+          />
+          <SidebarItem
+            href="/admin/technicians"
+            label="Techniciens"
+            icon={<UserCogIcon size={18} />}
+          />
+        </SidebarSection>
+
+        {/* ANALYSE */}
+        <SidebarSection title="Analyse" defaultOpen={false}>
+          <SidebarItem
+            href="/admin/analytics"
+            label="Visiteurs"
+            icon={<EyeIcon size={18} />}
+          />
+          <SidebarItem
+            href="/admin/reports"
+            label="Rapports CA"
+            icon={<BarChartIcon size={18} />}
+          />
+          <SidebarItem
+            href="/admin/logs"
+            label="Journal"
+            icon={<FileTextIcon size={18} />}
+          />
+        </SidebarSection>
+
+        {/* SYSTÈME */}
+        <SidebarSection title="Système" defaultOpen={false}>
+          <SidebarItem
+            href="/admin/preferences"
+            label="Préférences"
+            icon={<SettingsIcon size={18} />}
+          />
+          <SidebarItem
+            href="/admin/settings"
+            label="Boutique"
+            icon={<StoreIcon size={18} />}
+          />
+        </SidebarSection>
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-slate-200 p-3 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-        >
-          <LogoutIcon size={16} />
-          Déconnexion
-        </button>
+      {/* ============================================ */}
+      {/* Footer - User                                */}
+      {/* ============================================ */}
+      <div className="border-t border-[var(--border)] p-3">
+        <div className="flex items-center gap-3 rounded-lg bg-[var(--bg-muted)] p-2.5">
+          {/* Avatar */}
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-500 text-sm font-bold text-white">
+            {initials}
+          </div>
+
+          {/* Info */}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-[var(--fg-primary)]">
+              {user?.first_name && user?.last_name
+                ? `${user.first_name} ${user.last_name}`
+                : "Administrateur"}
+            </p>
+            <p className="truncate text-[10px] text-[var(--fg-muted)]">
+              {user?.email || "admin@lami.mg"}
+            </p>
+          </div>
+
+          {/* Bouton déconnexion */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="shrink-0 rounded-lg p-1.5 text-[var(--fg-muted)] transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+            title="Déconnexion"
+          >
+            <LogoutIcon size={16} />
+          </button>
+        </div>
       </div>
     </aside>
   );

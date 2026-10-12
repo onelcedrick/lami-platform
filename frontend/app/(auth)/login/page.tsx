@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { logActivity } from "@/lib/analytics";
 import { useAuthStore } from "@/lib/store";
-import { LogoIcon } from "@/components/ui/icons";
+import DynamicLogo from "@/components/ui/DynamicLogo";
 import { syncAccountState } from "@/lib/sync-account";
 import { getHomePathForRole } from "@/lib/auth-routing";
 import AnimatedSection from "@/components/ui/AnimatedSection";
@@ -54,7 +54,7 @@ export default function LoginPage() {
       <AnimatedSection className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="inline-flex items-center justify-center rounded-2xl bg-[var(--bg-surface)] p-3 shadow-sm dark:border dark:border-[var(--border)]">
-            <LogoIcon size={48} />
+            <DynamicLogo variant="full" size={48} />
           </div>
           <h1 className="mt-6 text-2xl font-bold tracking-tight text-[var(--fg-primary)]">Connexion</h1>
           <p className="mt-2 text-sm text-[var(--fg-secondary)]">Accédez à votre espace client L&apos;AMI</p>

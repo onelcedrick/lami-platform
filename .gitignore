@@ -1,69 +1,86 @@
-# ===== Node / Next.js =====
+# ============================================================
+# DEPENDANCES
+# ============================================================
 node_modules/
+**/node_modules/
+vendor/
+**/vendor/
+
+# ============================================================
+# BUILD / DIST
+# ============================================================
 .next/
+**/.next/
 out/
 dist/
 build/
-.turbo/
+**/build/
 *.tsbuildinfo
+next-env.d.ts
 
-# ===== Python =====
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-env/
-*.egg-info/
+# ============================================================
+# CACHE
+# ============================================================
+cache/
+**/cache/
+**/.cache/
+**/__pycache__/
+**/*.pyc
 .pytest_cache/
-.mypy_cache/
+.turbo/
 
-# ===== Go =====
-bin/
-*.exe
-*.test
-*.out
-vendor/
+# ============================================================
+# IMAGES PRODUITS (import massif - ne pas versionner)
+# ============================================================
+frontend/public/images/
+**/public/images/
+frontend/public/uploads/
+**/public/uploads/
 
-# ===== Environnement =====
+# ============================================================
+# DOCKER / OFFLINE
+# ============================================================
+docker-offline-images/
+**/docker-offline-images/
+*.tar
+*.tar.gz
+*.tgz
+
+# ============================================================
+# BACKUPS TEMPORAIRES
+# ============================================================
+*.bak
+*.bak-*
+*.backup
+categories-backup-*.jsonl
+prepare-offline.sh
+
+# ============================================================
+# ENV / SECRETS
+# ============================================================
 .env
 .env.local
 .env.*.local
-*.env
+!.env.example
+**/.env
 
-# ===== IDE =====
-.vscode/
+# ============================================================
+# LOGS
+# ============================================================
+*.log
+logs/
+
+# ============================================================
+# OS / IDE
+# ============================================================
+.DS_Store
 .idea/
+.vscode/
 *.swp
 
-# ===== Système =====
-.DS_Store
-Thumbs.db
-
-# ===== Docker volumes / data =====
-volumes/
-data/
-uploads/
-storage/
-
-# ===== Base de données locale =====
-*.sqlite
-*.sqlite3
-*.db
-
-# ===== Logs =====
-logs/
-*.log
-npm-debug.log*
-backend/go-cache/
-backend/bin/
-.env
-services/ia/.env
-.env
-
-# Images publiques (générées localement, trop volumineuses)
-frontend/public/images/
-
-# Backups
-*.bak
-*.bak2
-*.bak.*
+# ============================================================
+# MODELES IA
+# ============================================================
+**/models--*/
+**/sentence_transformers/
+**/huggingface/

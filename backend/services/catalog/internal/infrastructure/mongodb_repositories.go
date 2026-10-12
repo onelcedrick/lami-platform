@@ -260,11 +260,15 @@ func (r *MongoProductRepository) ListByPopularity(ctx context.Context, limit int
 // ---------------------------------------------------------------------------
 
 type MongoCategoryRepository struct {
-	collection *mongo.Collection
+	collection        *mongo.Collection
+	productCollection *mongo.Collection
 }
 
 func NewMongoCategoryRepository(client *mongodb.Client) *MongoCategoryRepository {
-	return &MongoCategoryRepository{collection: client.Collection("categories")}
+	return &MongoCategoryRepository{
+		collection:        client.Collection("categories"),
+		productCollection: client.Collection("products"),
+	}
 }
 
 func (r *MongoCategoryRepository) Create(ctx context.Context, category *shareddomain.Category) error {
@@ -420,4 +424,27 @@ func (r *MongoProductRepository) FindBySKUs(ctx context.Context, skus []string) 
 		return nil, err
 	}
 	return products, nil
+}
+
+// ============================================================
+// AJOUT : Gestion des produits lies aux categories
+// ============================================================
+
+// CountProducts retourne le nombre de produits dans une categorie.
+func (r *MongoCategoryRepository) CountProducts(ctx context.Context, categoryID string) (int64, error) {
+	return r.productCollection.CountDocuments(ctx, bson.M{"category_id": categoryID})
+}
+
+// ReassignProducts deplace tous les produits d'une categorie vers une autre.
+// Retourne le nombre de produits deplaces.
+func (r *MongoCategoryRepository) ReassignProducts(ctx context.Context, fromCategoryID, toCategoryID string) (int64, error) {
+	result, err := r.productCollection.UpdateMany(
+		ctx,
+		bson.M{"category_id": fromCategoryID},
+		bson.M{"$set": bson.M{"category_id": toCategoryID}},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.ModifiedCount, nil
 }

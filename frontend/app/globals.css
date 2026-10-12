@@ -38,8 +38,51 @@ html.dark { color-scheme: dark; }
 html { color-scheme: light; }
 
 @layer components {
-  .card { @apply rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm; }
-  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed; }
+  /* ---------- Card ---------- */
+  .card {
+    @apply rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm;
+  }
+
+  /* ---------- Card admin (legerement surelevee) ---------- */
+  .card-admin {
+    @apply rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm;
+  }
+
+  /* ---------- Boutons ---------- */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-sm font-semibold text-[var(--fg-secondary)] transition-all hover:bg-[var(--bg-muted)] hover:text-[var(--fg-primary)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* ---------- Inputs (le fix principal) ---------- */
+  .input-field {
+    @apply w-full rounded-lg border border-[var(--border)] bg-[var(--bg-app)] px-3.5 py-2.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] transition-all;
+  }
+
+  .input-field:focus {
+    @apply border-primary-500 outline-none ring-2 ring-primary-500/20;
+  }
+
+  .input-field:disabled {
+    @apply cursor-not-allowed opacity-60;
+  }
+
+  /* Textarea */
+  textarea.input-field {
+    @apply min-h-[80px] resize-y;
+  }
+
+  /* Select */
+  select.input-field {
+    @apply cursor-pointer;
+  }
 }
 
 @layer utilities {

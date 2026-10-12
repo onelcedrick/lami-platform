@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronsLeftIcon, ChevronsRightIcon } from "@/components/ui/icons";
 
 interface SidebarLayoutProps {
   sidebar: React.ReactNode;
@@ -40,7 +41,7 @@ export default function SidebarLayout({
   if (!mounted) {
     return (
       <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
-        <div className="w-60 shrink-0 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" />
+        <div className="w-64 shrink-0 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" />
         <div className="flex-1" />
       </div>
     );
@@ -67,25 +68,20 @@ export default function SidebarLayout({
 
       {/* Contenu principal */}
       <div className="relative flex min-w-0 flex-1 flex-col">
-        {/* Toggle button */}
+        {/* Toggle button - positionne a droite de la sidebar, verticalement centre */}
         <button
           type="button"
           onClick={toggle}
-          className="fixed left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+          className={`fixed top-1/2 z-50 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md transition-all hover:scale-110 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 ${
+            isOpen ? "left-[244px]" : "left-3"
+          }`}
           aria-label={isOpen ? "Masquer le menu" : "Afficher le menu"}
           title={isOpen ? "Masquer le menu" : "Afficher le menu"}
         >
           {isOpen ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" x2="6" y1="6" y2="18" />
-              <line x1="6" x2="18" y1="6" y2="18" />
-            </svg>
+            <ChevronsLeftIcon size={14} />
           ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="3" x2="21" y1="6" y2="6" />
-              <line x1="3" x2="21" y1="12" y2="12" />
-              <line x1="3" x2="21" y1="18" y2="18" />
-            </svg>
+            <ChevronsRightIcon size={14} />
           )}
         </button>
 
