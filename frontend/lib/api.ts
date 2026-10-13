@@ -16,6 +16,11 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
+  // Declencher la barre de chargement
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("loading-bar-start"));
+  }
+
   const token =
     typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
 
@@ -28,13 +33,20 @@ async function request<T>(
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+    });
 
-  const json = await res.json();
-  return json as ApiResponse<T>;
+    const json = await res.json();
+    return json as ApiResponse<T>;
+  } finally {
+    // Arreter la barre de chargement
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("loading-bar-stop"));
+    }
+  }
 }
 
 function qs(params?: Record<string, string | number | boolean | undefined>) {
@@ -79,6 +91,9 @@ export const api = {
     request(`/api/v1/catalog/products${qs(params)}`),
 
   getProduct: (id: string) => request(`/api/v1/catalog/products/${id}`),
+
+  getSimilarProducts: (id: string, limit = 4) =>
+    request(`/api/v1/catalog/products/${id}/similar?limit=${limit}`),
 
   getProductBySlug: (slug: string) =>
     request(`/api/v1/catalog/products/slug/${encodeURIComponent(slug)}`),
@@ -462,4 +477,14 @@ export const avatarApi = {
     request<{ success: boolean }>("/api/v1/users/me/avatar", {
       method: "DELETE",
     }),
+};
+
+// ============================================================
+// AJOUT : Produits similaires
+// ============================================================
+
+// Cette fonction est ajoutee a l'objet api existant via une extension
+export const similarApi = {
+  getSimilar: (id: string, limit = 4) =>
+    request(`/api/v1/catalog/products/${id}/similar?limit=${limit}`),
 };

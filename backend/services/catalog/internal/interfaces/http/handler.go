@@ -521,3 +521,27 @@ func (h *CatalogHandler) GetCategoryProducts(c *fiber.Ctx) error {
 		"total": total,
 	})
 }
+
+
+// ============================================================
+// AJOUT : Handler pour les produits similaires
+// ============================================================
+
+func (h *CatalogHandler) GetSimilarProducts(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return response.ValidationError(c, "id obligatoire")
+	}
+
+	limit := 4
+	if l, err := strconv.Atoi(c.Query("limit", "4")); err == nil {
+		limit = l
+	}
+
+	products, err := h.service.FindSimilarProducts(c.Context(), id, limit)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Produits similaires", products)
+}

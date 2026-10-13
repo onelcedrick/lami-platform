@@ -31,7 +31,7 @@ const FOOTER_LINKS = [
 export default function Footer() {
   return (
     <footer className="border-t border-[var(--border)] bg-[var(--bg-surface)] dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full px-4 py-12 sm:px-6 lg:px-10 xl:px-16">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-5">
           {/* Marque */}
           <div className="lg:col-span-2">

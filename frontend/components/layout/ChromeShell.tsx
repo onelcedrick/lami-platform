@@ -6,6 +6,7 @@ import Footer from "@/components/layout/Footer";
 import ChatWidget from "@/components/chat/ChatWidget";
 import ScrollToTop from "@/components/ui/ScrollToTop";
 import VisitorTracker from "@/components/analytics/VisitorTracker";
+import LoadingBar from "@/components/ui/LoadingBar";
 
 /** Préfixes de routes où l'on masque l'habillage boutique */
 const HIDE_CHROME_PREFIXES = ["/admin", "/technician"];
@@ -27,6 +28,7 @@ export default function ChromeShell({
   // Site boutique classique
   return (
     <>
+      <LoadingBar />
       <Header />
       <main className="flex-1">{children}</main>
       <Footer />

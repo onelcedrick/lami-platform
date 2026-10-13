@@ -15,6 +15,24 @@ const config: Config = {
           800: "#1e40af", 900: "#1e3a8a",
         },
         accent: { 500: "#f59e0b", 600: "#d97706" },
+        // Design system TechStore
+        navy: {
+          core: "#0A1628",
+          deep: "#060D18",
+          panel: "#102544",
+        },
+        cyan: {
+          DEFAULT: "#00D4FF",
+          hover: "#00B8E0",
+          soft: "#E0F7FF",
+        },
+        orange: {
+          DEFAULT: "#FF6B35",
+          hover: "#E85A28",
+        },
+        success: {
+          DEFAULT: "#10D98C",
+        },
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],

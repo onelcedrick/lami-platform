@@ -15,6 +15,7 @@ func SetupRoutes(app *fiber.App, handler *CatalogHandler, jwtSecret string) {
 	api.Get("/products", handler.ListProducts)
 	api.Get("/products/popular", handler.ListPopular)
 	api.Get("/products/:id", handler.GetProduct)
+	api.Get("/products/:id/similar", handler.GetSimilarProducts)
 	api.Get("/products/slug/:slug", handler.GetProductBySlug)
 	api.Get("/categories", handler.ListCategories)
 	api.Get("/discounts/active", handler.ListActiveDiscounts)   // ✅ reste publique

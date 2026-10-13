@@ -716,3 +716,22 @@ func (s *CatalogService) MergeCategories(
 
 	return moved, nil
 }
+
+
+// ============================================================
+// AJOUT : Recommandations de produits similaires
+// ============================================================
+
+func (s *CatalogService) FindSimilarProducts(
+	ctx context.Context,
+	productID string,
+	limit int,
+) ([]shareddomain.Product, error) {
+	if limit <= 0 {
+		limit = 4
+	}
+	if limit > 12 {
+		limit = 12
+	}
+	return s.productRepo.FindSimilar(ctx, productID, limit)
+}

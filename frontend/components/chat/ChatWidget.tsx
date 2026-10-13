@@ -1,5 +1,6 @@
 "use client";
 
+import { useChatStore } from "@/lib/chat-store";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { LogoIcon, PlusIcon, TrashIcon, MessageIcon, XIcon, CartIcon, StarIcon } from "@/components/ui/icons";
@@ -40,7 +41,11 @@ interface ConversationSummary {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function ChatWidget() {
-  const [open, setOpen] = useState(false);
+  const open = useChatStore((s) => s.open);
+  const openChat = useChatStore((s) => s.openChat);
+  const closeChat = useChatStore((s) => s.closeChat);
+  const toggleChat = useChatStore((s) => s.toggleChat);
+  const consumePendingMessage = useChatStore((s) => s.consumePendingMessage);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -255,7 +260,7 @@ export default function ChatWidget() {
     <>
       {/* Bouton flottant */}
       <button
-        onClick={() => setOpen(!open)}
+        onClick={toggleChat}
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-xl shadow-primary-900/30 transition hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
         aria-label="Ouvrir l'assistant"
       >

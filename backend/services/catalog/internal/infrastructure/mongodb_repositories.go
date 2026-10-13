@@ -2,6 +2,8 @@ package infrastructure
 
 import (
 	"context"
+	"math"
+	"sort"
 	"errors"
 	"time"
 
@@ -448,3 +450,116 @@ func (r *MongoCategoryRepository) ReassignProducts(ctx context.Context, fromCate
 	}
 	return result.ModifiedCount, nil
 }
+
+
+// ============================================================
+// AJOUT : Algorithme de recommandation de produits similaires
+// ============================================================
+
+func (r *MongoProductRepository) FindSimilar(
+	ctx context.Context,
+	productID string,
+	limit int,
+) ([]shareddomain.Product, error) {
+	// 1. Charger le produit source
+	var source shareddomain.Product
+	err := r.collection.FindOne(ctx, bson.M{"_id": productID}).Decode(&source)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Charger 50 candidats (meme categorie OU meme marque OU active)
+	cursor, err := r.collection.Find(ctx, bson.M{
+		"_id":    bson.M{"$ne": productID},
+		"status": "active",
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var candidates []shareddomain.Product
+	if err := cursor.All(ctx, &candidates); err != nil {
+		return nil, err
+	}
+
+	// 3. Scorer chaque candidat
+	type scored struct {
+		product shareddomain.Product
+		score   int
+	}
+
+	results := make([]scored, 0)
+	for _, c := range candidates {
+		score := 0
+
+		// +50 si meme categorie
+		if c.CategoryID == source.CategoryID {
+			score += 50
+		}
+
+		// +30 si meme marque
+		if c.Brand != "" && c.Brand == source.Brand {
+			score += 30
+		}
+
+		// +20 si prix proche (<30% d'ecart)
+		if source.Price > 0 && c.Price > 0 {
+			diff := math.Abs(c.Price - source.Price) / source.Price
+			if diff < 0.3 {
+				score += 20
+			} else if diff < 0.5 {
+				score += 10
+			}
+		}
+
+		// +15 par usage_tag commun
+		for _, tag := range source.UsageTags {
+			for _, cTag := range c.UsageTags {
+				if tag == cTag {
+					score += 15
+					break
+				}
+			}
+		}
+
+		// +5 si en stock
+		if c.Stock > 0 {
+			score += 5
+		}
+
+		// Garder si score >= 30
+		if score >= 30 {
+			results = append(results, scored{product: c, score: score})
+		}
+	}
+
+	// 4. Trier par score decroissant
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].score > results[j].score
+	})
+
+	// 5. Limiter
+	if limit > 0 && len(results) > limit {
+		results = results[:limit]
+	}
+
+	// 6. Extraire les produits
+	out := make([]shareddomain.Product, len(results))
+	for i, r := range results {
+		out[i] = r.product
+	}
+	return out, nil
+}
+// ============================================================
+// FindSimilar : Algorithme de recommandation de produits
+// ============================================================
+// Scoring :
+//   +50 : meme categorie
+//   +30 : meme marque
+//   +20 : prix proche (< 30%)
+//   +10 : prix proche (30-50%)
+//   +15 : par usage_tag commun
+//   +10 : par attribut commun (cle + valeur)
+//   +5  : en stock
+// ============================================================

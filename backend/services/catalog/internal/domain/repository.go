@@ -7,6 +7,7 @@ import (
 )
 
 type ProductRepository interface {
+	FindSimilar(ctx context.Context, productID string, limit int) ([]shareddomain.Product, error)
 	Create(ctx context.Context, product *shareddomain.Product) error
 	FindByID(ctx context.Context, id string) (*shareddomain.Product, error)
 	FindBySlug(ctx context.Context, slug string) (*shareddomain.Product, error)

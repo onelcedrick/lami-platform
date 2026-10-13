@@ -3,10 +3,36 @@
 @tailwind utilities;
 
 :root {
-  --bg-app: #fafafa; --bg-surface: #ffffff; --bg-elevated: #ffffff; --bg-muted: #f4f4f5;
-  --fg-primary: #18181b; --fg-secondary: #52525b; --fg-muted: #a1a1aa; --fg-accent: #3b82f6;
-  --border: #e4e4e7; --border-strong: #d4d4d8;
-  --success: #10b981; --warning: #f59e0b; --error: #ef4444; --info: #3b82f6;
+  /* Design system TechStore - Light */
+  --navy-core: #0A1628;
+  --navy-deep: #060D18;
+  --navy-panel: #102544;
+  --cyan: #00D4FF;
+  --cyan-hover: #00B8E0;
+  --orange: #FF6B35;
+  --orange-hover: #E85A28;
+  --success-green: #10D98C;
+
+  /* Adapte selon le theme */
+  --bg-app: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-muted: #f1f5f9;
+  --bg-navy: #0A1628;
+
+  --fg-primary: #0f172a;
+  --fg-secondary: #475569;
+  --fg-muted: #94a3b8;
+  --fg-accent: #00D4FF;
+  --fg-accent-hover: #00B8E0;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --success: #10D98C;
+  --warning: #FF6B35;
+  --error: #ef4444;
+  --info: #00D4FF;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -15,9 +41,21 @@
 }
 
 .dark {
-  --bg-app: #09090b; --bg-surface: #18181b; --bg-elevated: #27272a; --bg-muted: #27272a;
-  --fg-primary: #fafafa; --fg-secondary: #a1a1aa; --fg-muted: #71717a; --fg-accent: #60a5fa;
-  --border: #27272a; --border-strong: #3f3f46;
+  /* Design system TechStore - Dark */
+  --bg-app: #060D18;
+  --bg-surface: #0A1628;
+  --bg-elevated: #102544;
+  --bg-muted: #1E3A5F;
+  --bg-navy: #0A1628;
+
+  --fg-primary: #F8FAFC;
+  --fg-secondary: #94A3B8;
+  --fg-muted: #64748B;
+  --fg-accent: #00D4FF;
+  --fg-accent-hover: #00B8E0;
+
+  --border: #1E3A5F;
+  --border-strong: #2E4A7F;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
@@ -50,7 +88,15 @@ html { color-scheme: light; }
 
   /* ---------- Boutons ---------- */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-700 hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--cyan);
+    color: var(--navy-deep);
+    font-weight: 700;
+  }
+
+  .btn-primary:hover {
+    background-color: var(--cyan-hover);
+    box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
   }
 
   .btn-secondary {
@@ -63,11 +109,20 @@ html { color-scheme: light; }
 
   /* ---------- Inputs (le fix principal) ---------- */
   .input-field {
-    @apply w-full rounded-lg border border-[var(--border)] bg-[var(--bg-app)] px-3.5 py-2.5 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] transition-all;
+    @apply w-full rounded-lg border px-3.5 py-2.5 text-sm transition-all;
+    border-color: var(--border);
+    background-color: var(--bg-app);
+    color: var(--fg-primary);
+  }
+
+  .input-field::placeholder {
+    color: var(--fg-muted);
   }
 
   .input-field:focus {
-    @apply border-primary-500 outline-none ring-2 ring-primary-500/20;
+    border-color: var(--cyan);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
   }
 
   .input-field:disabled {
@@ -87,7 +142,7 @@ html { color-scheme: light; }
 
 @layer utilities {
   .space-section { @apply py-16 sm:py-20 lg:py-24; }
-  .space-container { @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8; }
+  .space-container { @apply w-full px-4 sm:px-6 lg:px-10 xl:px-16; }
   .glass { @apply bg-white/70 backdrop-blur-xl border border-white/20; }
   .dark .glass { @apply bg-zinc-900/70 border-zinc-800/50; }
   .gradient-text { @apply bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent; }
