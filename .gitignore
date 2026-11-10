@@ -84,3 +84,4 @@ logs/
 **/models--*/
 **/sentence_transformers/
 **/huggingface/
+backend/services/ia.zip

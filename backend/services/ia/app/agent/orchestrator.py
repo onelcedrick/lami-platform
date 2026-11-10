@@ -116,7 +116,7 @@ class AgentOrchestrator:
         budget_match = re.search(
             r"(\d[\d\s.,]*)\s*(ar|ariary|mga|€|euros?|eur)?", lower,
         )
-        millions = re.search(r"(\d+[.,]?\d*)\s*millions?", lower)
+        millions = re.search(r"(\d+[.,]?\d*)\s*(m|millions?)\b", lower)
         usage = None
         for u in ("gaming", "bureautique", "montage video", "montage", "creation"):
             if u in lower:
@@ -124,8 +124,11 @@ class AgentOrchestrator:
                 break
 
         budget = None
+
         if millions:
             budget = float(millions.group(1).replace(",", ".")) * 1_000_000
+            print(f"[INTENT] Budget détecté : {budget} Ar")
+    
         elif budget_match:
             raw = budget_match.group(1).replace(" ", "").replace(",", ".")
             try:
@@ -227,18 +230,25 @@ class AgentOrchestrator:
         start = time.perf_counter()
         conv_id = conversation_id or str(uuid4())
         detected = self.detect_mode(message, mode)
-
         sess = self._session(conv_id)
-        if sess.get("pending_build") and mode == "auto":
-            lower = message.lower()
-            if any(
-                w in lower
-                for w in (
-                    "oui", "ok", "d'accord", "ajoute", "panier", "non",
-                    "valide", "accepte", "vas-y", "confirme",
-                )
-            ):
+        lower_msg = message.lower().strip()
+        
+        # ✅ DÉTECTION PRIORITAIRE DU PANIER
+        # Si l'utilisateur parle d'ajouter au panier, on gère ça AVANT tout le reste
+        is_cart_action = any(w in lower_msg for w in ["oui", "ok", "d'accord", "ajoute", "panier", "valide", "accepte", "confirme"])
+        
+        if is_cart_action and len(lower_msg) < 30: # "Oui", "Ok ajoute le", etc.
+            if sess.get("pending_build"):
                 detected = "commerce"
+            else:
+                # L'utilisateur veut ajouter au panier mais on n'a pas de config en mémoire
+                latency = int((time.perf_counter() - start) * 1000)
+                return ChatResponse(
+                    conversation_id=conv_id,
+                    reply="Je ne retrouve pas votre configuration récente. Souhaitez-vous que je vous propose une nouvelle configuration PC ?",
+                    mode="commerce",
+                    sources=[], tool_calls=[], products=[], latency_ms=latency
+                )
 
         sources: list[SourceDocument] = []
         tool_results: list[ToolCallResult] = []
@@ -364,6 +374,15 @@ class AgentOrchestrator:
                 return (
                     "D'accord, je ne touche pas au panier. "
                     "Donnez un autre budget ou usage pour une nouvelle config.",
+                    [],
+                )
+
+            # ✅ GARDE-FOU : Si on parle d'ajouter au panier mais qu'il n'y a pas de config en mémoire
+            lower_msg = message.lower()
+            if any(w in lower_msg for w in ["panier", "ajout", "valide"]) and not session.get("pending_build"):
+                return (
+                    "Je ne vois pas de configuration récente à ajouter. "
+                    "Souhaitez-vous que je vous propose une nouvelle configuration PC ?",
                     [],
                 )
 
@@ -532,7 +551,10 @@ class AgentOrchestrator:
 
         if name == "add_to_cart":
             n = raw.get("count", 0)
-            total = raw.get("total", 0)
+            try:
+                total = float(raw.get("total", 0))
+            except (ValueError, TypeError):
+                total = 0.0
             return (
                 f"Parfait — j'ai ajoute {n} composant(s) dans votre panier "
                 f"(total approx. {total:,.0f} Ar). ".replace(",", " ")

@@ -152,7 +152,7 @@ function CatalogInner() {
   );
 
   return (
-    <AnimatedSection className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <AnimatedSection className="mx-auto w-full px-4 py-8 sm:px-6 lg:px-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--fg-muted)]">
@@ -169,7 +169,7 @@ function CatalogInner() {
       </div>
 
       <div className="mt-6 flex gap-8">
-        <aside className="hidden w-64 shrink-0 lg:block">
+        <aside className="hidden w-56 xl:w-64 shrink-0 lg:block">
           <div className="sticky top-24">{sidebarContent}</div>
         </aside>
 
@@ -264,7 +264,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 
 export default function CatalogPage() {
   return (
-    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-16 text-center text-[var(--fg-muted)]">Chargement du catalogue...</div>}>
+    <Suspense fallback={<div className="mx-auto w-full px-4 py-16 text-center text-[var(--fg-muted)]">Chargement du catalogue...</div>}>
       <CatalogInner />
     </Suspense>
   );

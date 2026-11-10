@@ -106,7 +106,7 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
   }
 
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] transition-all duration-300 hover:-translate-y-1 hover:border-[var(--cyan)]/40 hover:shadow-xl">
+    <article className="group relative flex flex-col overflow-hidden rounded-xl border border-white/5 shadow-sm bg-[var(--bg-surface)] transition-all duration-300 hover:-translate-y-1 hover:border-[var(--cyan)]/40 hover:shadow-xl">
       {/* ============ IMAGE ============ */}
       <div className="relative overflow-hidden">
         <Link
@@ -247,7 +247,7 @@ function ProductCard({ product: p, discounts = [] }: ProductCardProps) {
               productName={p.name}
               path={href}
               compact
-              className="inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 text-[var(--fg-secondary)] transition hover:border-[var(--cyan)]/40 hover:bg-[var(--bg-muted)] hover:text-[var(--cyan)]"
+              className="inline-flex items-center justify-center rounded-lg border border-white/5 shadow-sm bg-[var(--bg-surface)] px-2.5 text-[var(--fg-secondary)] transition hover:border-[var(--cyan)]/40 hover:bg-[var(--bg-muted)] hover:text-[var(--cyan)]"
             />
           </div>
         </div>

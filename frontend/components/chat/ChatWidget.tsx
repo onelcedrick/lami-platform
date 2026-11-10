@@ -49,7 +49,10 @@ export default function ChatWidget() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("lami-chat-id");
+    return null;
+  });
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -206,7 +209,10 @@ export default function ChatWidget() {
       const json = await res.json();
       const data = json.data || json;
 
-      if (data.conversation_id) setConversationId(data.conversation_id);
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id);
+        localStorage.setItem("lami-chat-id", data.conversation_id);
+      }
 
       let cartAdded = 0;
       const toolCalls = data.tool_calls || [];
