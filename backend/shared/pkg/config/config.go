@@ -12,7 +12,7 @@ type Config struct {
 	HTTPPort        string
 	MongoURI        string
 	MongoDBName     string
-	RedisAddr       string
+	RedisURL        string
 	JWTSecret       string
 	JWTExpiration   time.Duration
 	GatewayURL      string
@@ -39,7 +39,7 @@ func Load(serviceName string) *Config {
 		HTTPPort:         getEnv("HTTP_PORT", "8080"),
 		MongoURI:         getEnv("MONGO_URI", "mongodb://localhost:27017"),
 		MongoDBName:      getEnv("MONGO_DB", "lami_"+serviceName),
-		RedisAddr:        getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisURL:        getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		JWTSecret:        getEnv("JWT_SECRET", "lami-super-secret-key-change-in-production-2026"),
 		JWTExpiration:    time.Duration(getEnvAsInt("JWT_EXPIRATION_HOURS", 24)) * time.Hour,
 		GatewayURL:       getEnv("GATEWAY_URL", "http://localhost:8000"),

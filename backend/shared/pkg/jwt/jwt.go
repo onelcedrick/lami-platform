@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type Claims struct {
@@ -18,17 +19,37 @@ type TokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int64  `json:"expires_in"`
+	AccessJTI    string `json:"-"` // interne
+	RefreshJTI   string `json:"-"` // interne
 }
 
 func GenerateTokenPair(userID, email, role, secret string, expiration time.Duration) (*TokenPair, error) {
+	return GenerateTokenPairWithJTI(userID, email, role, secret, expiration, "", "")
+}
+
+// GenerateTokenPairWithJTI genere une paire de tokens avec des JTI personnalises.
+func GenerateTokenPairWithJTI(
+	userID, email, role, secret string,
+	expiration time.Duration,
+	accessJTI, refreshJTI string,
+) (*TokenPair, error) {
 	now := time.Now()
 	expiresAt := now.Add(expiration)
+
+	// Generer les JTI si non fournis
+	if accessJTI == "" {
+		accessJTI = uuid.New().String()
+	}
+	if refreshJTI == "" {
+		refreshJTI = uuid.New().String()
+	}
 
 	claims := Claims{
 		UserID: userID,
 		Email:  email,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        accessJTI,
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
@@ -48,7 +69,8 @@ func GenerateTokenPair(userID, email, role, secret string, expiration time.Durat
 		Email:  email,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)),
+			ID:        refreshJTI,
+			ExpiresAt: jwt.NewNumericDate(now.Add(30 * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			Issuer:    "lami-platform",
 			Subject:   userID,
@@ -65,6 +87,8 @@ func GenerateTokenPair(userID, email, role, secret string, expiration time.Durat
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		ExpiresIn:    int64(expiration.Seconds()),
+		AccessJTI:    accessJTI,
+		RefreshJTI:   refreshJTI,
 	}, nil
 }
 

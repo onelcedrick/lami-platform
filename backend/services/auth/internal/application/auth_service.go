@@ -10,6 +10,7 @@ import (
 
 	shareddomain "github.com/lami-platform/shared/domain"
 	"github.com/lami-platform/shared/pkg/jwt"
+	sessionpkg "github.com/lami-platform/shared/pkg/session"
 	"github.com/lami-platform/services/auth/internal/domain"
 )
 
@@ -17,13 +18,20 @@ type AuthService struct {
 	userRepo  domain.UserRepository
 	jwtSecret string
 	jwtExp    time.Duration
+	sessions  *sessionpkg.Manager
 }
 
-func NewAuthService(userRepo domain.UserRepository, jwtSecret string, jwtExp time.Duration) *AuthService {
+func NewAuthService(
+	userRepo domain.UserRepository,
+	jwtSecret string,
+	jwtExp time.Duration,
+	sessions *sessionpkg.Manager,
+) *AuthService {
 	return &AuthService{
 		userRepo:  userRepo,
 		jwtSecret: jwtSecret,
 		jwtExp:    jwtExp,
+		sessions:  sessions,
 	}
 }
 
@@ -95,6 +103,22 @@ func (s *AuthService) Login(ctx context.Context, req shareddomain.LoginRequest) 
 		return nil, err
 	}
 
+	// ✅ NOUVEAU : Creer une session Redis
+	if s.sessions != nil {
+		sess, err := s.sessions.Create(
+			ctx,
+			user.ID,
+			user.Email,
+			string(user.Role),
+			"", // user_agent (a recuperer du contexte si dispo)
+			"", // ip
+		)
+		if err == nil && sess != nil {
+			// Stocker le refresh token lie au JTI
+			_ = s.sessions.StoreRefresh(ctx, sess.JTI, tokenPair.RefreshToken)
+		}
+	}
+
 	user.PasswordHash = ""
 	return &shareddomain.AuthResponse{
 		User:         user,
@@ -128,9 +152,31 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*s
 		return nil, errors.New("compte desactive")
 	}
 
+	// ✅ Verifier que le refresh token n'est pas blackliste
+	if s.sessions != nil && claims.ID != "" {
+		blocked, _ := s.sessions.IsBlacklisted(ctx, claims.ID)
+		if blocked {
+			return nil, errors.New("refresh token revoque")
+		}
+	}
+
+	// ✅ Revoquer l'ancien refresh token (rotation)
+	if s.sessions != nil && claims.ID != "" {
+		_ = s.sessions.Revoke(ctx, claims.ID, sessionpkg.RefreshTTL)
+		_ = s.sessions.RevokeSession(ctx, user.ID, claims.ID)
+	}
+
 	tokenPair, err := jwt.GenerateTokenPair(user.ID, user.Email, string(user.Role), s.jwtSecret, s.jwtExp)
 	if err != nil {
 		return nil, err
+	}
+
+	// ✅ Creer une nouvelle session
+	if s.sessions != nil {
+		sess, err := s.sessions.Create(ctx, user.ID, user.Email, string(user.Role), "", "")
+		if err == nil && sess != nil {
+			_ = s.sessions.StoreRefresh(ctx, sess.JTI, tokenPair.RefreshToken)
+		}
 	}
 
 	user.PasswordHash = ""
@@ -140,4 +186,64 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*s
 		RefreshToken: tokenPair.RefreshToken,
 		ExpiresIn:    tokenPair.ExpiresIn,
 	}, nil
+}
+
+// ============================================================
+// AJOUT : Logout + Sessions Redis
+// ============================================================
+
+// Logout revoque le refresh token (et l'access si fourni).
+func (s *AuthService) Logout(ctx context.Context, userID, accessJTI, refreshJTI string) error {
+	if s.sessions == nil {
+		return nil
+	}
+
+	// 1. Blacklister l'access token (TTL court, il expire de toute facon)
+	if accessJTI != "" {
+		_ = s.sessions.Revoke(ctx, accessJTI, 24*time.Hour)
+	}
+
+	// 2. Blacklister + supprimer le refresh token
+	if refreshJTI != "" {
+		_ = s.sessions.RevokeSession(ctx, userID, refreshJTI)
+	}
+
+	return nil
+}
+
+// ListSessions retourne les sessions actives.
+func (s *AuthService) ListSessions(ctx context.Context, userID string) ([]*sessionpkg.Session, error) {
+	if s.sessions == nil {
+		return nil, nil
+	}
+	return s.sessions.ListActive(ctx, userID)
+}
+
+// RevokeSession supprime une session specifique.
+func (s *AuthService) RevokeSession(ctx context.Context, userID, jti string) error {
+	if s.sessions == nil {
+		return nil
+	}
+	return s.sessions.RevokeSession(ctx, userID, jti)
+}
+
+// RevokeAllSessions supprime toutes les sessions.
+func (s *AuthService) RevokeAllSessions(ctx context.Context, userID string) (int, error) {
+	if s.sessions == nil {
+		return 0, nil
+	}
+	return s.sessions.RevokeAll(ctx, userID)
+}
+
+// IsBlacklisted verifie si un JTI est blackliste.
+func (s *AuthService) IsBlacklisted(ctx context.Context, jti string) (bool, error) {
+	if s.sessions == nil {
+		return false, nil
+	}
+	return s.sessions.IsBlacklisted(ctx, jti)
+}
+
+// JWTSecret expose le secret (pour verifier les tokens dans les handlers).
+func (s *AuthService) JWTSecret() string {
+	return s.jwtSecret
 }

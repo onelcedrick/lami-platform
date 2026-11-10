@@ -563,3 +563,11 @@ func (r *MongoProductRepository) FindSimilar(
 //   +10 : par attribut commun (cle + valeur)
 //   +5  : en stock
 // ============================================================
+
+func (r *MongoProductRepository) UpdateRating(ctx context.Context, id string, rating float64, count int64) error {
+	_, err := r.collection.UpdateOne(ctx,
+		bson.M{"_id": id},
+		bson.M{"$set": bson.M{"rating": rating, "review_count": count}},
+	)
+	return err
+}

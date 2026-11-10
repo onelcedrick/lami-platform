@@ -16,4 +16,7 @@ type UserRepository interface {
 	CountByRole(ctx context.Context) (map[string]int64, error)
 	GetSettings(ctx context.Context) (*shareddomain.ShopSettings, error)
 	SaveSettings(ctx context.Context, st *shareddomain.ShopSettings) error
+	UpdateCart(ctx context.Context, userID string, items []shareddomain.UserCartItem) error
+	UpdateFavorites(ctx context.Context, userID string, items []shareddomain.UserFavoriteItem) error
+	UpdatePreferences(ctx context.Context, userID string, prefs map[string]interface{}) error
 }

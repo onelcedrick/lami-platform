@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { formatAriary } from "@/lib/currency";
 import LazyImage from "@/components/ui/LazyImage";
 import { ZapIcon } from "@/components/ui/icons";
+import ProductGridSkeleton from "@/components/ui/ProductGridSkeleton";
 
 interface Product {
   id: string;
@@ -73,13 +74,8 @@ export default function NewArrivals() {
         </div>
 
         {loading ? (
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="h-[380px] animate-pulse rounded-xl bg-[var(--bg-muted)]"
-              />
-            ))}
+          <div className="mt-10">
+            <ProductGridSkeleton count={4} />
           </div>
         ) : (
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

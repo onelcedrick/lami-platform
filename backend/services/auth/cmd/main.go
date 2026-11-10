@@ -14,6 +14,8 @@ import (
 	"github.com/lami-platform/shared/pkg/logger"
 	"github.com/lami-platform/shared/pkg/middleware"
 	"github.com/lami-platform/shared/pkg/mongodb"
+	redisclient "github.com/lami-platform/shared/pkg/redis"
+	sessionpkg "github.com/lami-platform/shared/pkg/session"
 	"github.com/lami-platform/services/auth/internal/application"
 	"github.com/lami-platform/services/auth/internal/infrastructure"
 	httpHandler "github.com/lami-platform/services/auth/internal/interfaces/http"
@@ -35,8 +37,22 @@ func main() {
 		_ = mongoClient.Disconnect(ctx)
 	}()
 
+	// Connexion Redis (sessions)
+	redisConn, err := redisclient.Connect(cfg.RedisURL)
+	if err != nil {
+		logger.Warn().Err(err).Msg("Redis indisponible — sessions desactivees")
+	}
+	var sessionManager *sessionpkg.Manager
+	if redisConn != nil {
+		sessionManager = sessionpkg.NewManager(redisConn)
+		// ✅ Configurer le middleware pour verifier la blacklist
+		middleware.SetRedisClient(redisConn)
+		logger.Info().Msg("Redis connecte (sessions actives + blacklist)")
+		defer redisConn.Close()
+	}
+
 	userRepo := infrastructure.NewMongoUserRepository(mongoClient)
-	authService := application.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpiration)
+	authService := application.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpiration, sessionManager)
 	application.SetGlobalOAuthConfig(application.OAuthConfig{
 		ClientID:     cfg.GoogleClientID,
 		ClientSecret: cfg.GoogleClientSecret,

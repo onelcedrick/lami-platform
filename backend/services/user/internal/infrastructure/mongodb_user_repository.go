@@ -159,3 +159,43 @@ func (r *MongoUserRepository) SaveSettings(ctx context.Context, st *shareddomain
 	)
 	return err
 }
+
+// ============================================================
+// AJOUT : Panier / Favoris / Preferences
+// ============================================================
+
+func (r *MongoUserRepository) UpdateCart(ctx context.Context, userID string, items []shareddomain.UserCartItem) error {
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": userID},
+		bson.M{"$set": bson.M{
+			"cart":       items,
+			"updated_at": time.Now().UTC(),
+		}},
+	)
+	return err
+}
+
+func (r *MongoUserRepository) UpdateFavorites(ctx context.Context, userID string, items []shareddomain.UserFavoriteItem) error {
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": userID},
+		bson.M{"$set": bson.M{
+			"favorites":  items,
+			"updated_at": time.Now().UTC(),
+		}},
+	)
+	return err
+}
+
+func (r *MongoUserRepository) UpdatePreferences(ctx context.Context, userID string, prefs map[string]interface{}) error {
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": userID},
+		bson.M{"$set": bson.M{
+			"preferences": prefs,
+			"updated_at":  time.Now().UTC(),
+		}},
+	)
+	return err
+}

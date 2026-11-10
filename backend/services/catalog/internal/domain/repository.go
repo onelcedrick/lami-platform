@@ -7,6 +7,7 @@ import (
 )
 
 type ProductRepository interface {
+	UpdateRating(ctx context.Context, id string, rating float64, count int64) error
 	FindSimilar(ctx context.Context, productID string, limit int) ([]shareddomain.Product, error)
 	Create(ctx context.Context, product *shareddomain.Product) error
 	FindByID(ctx context.Context, id string) (*shareddomain.Product, error)

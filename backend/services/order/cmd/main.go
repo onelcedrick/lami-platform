@@ -15,6 +15,7 @@ import (
 	"github.com/lami-platform/shared/pkg/middleware"
 	"github.com/lami-platform/shared/pkg/mongodb"
 	"github.com/lami-platform/shared/pkg/rabbitmq"
+	redisclient "github.com/lami-platform/shared/pkg/redis"
 	"github.com/lami-platform/services/order/internal/application"
 	"github.com/lami-platform/services/order/internal/infrastructure"
 	httpHandler "github.com/lami-platform/services/order/internal/interfaces/http"
@@ -46,9 +47,19 @@ func main() {
 		logger.Info().Msg("Publisher RabbitMQ actif (order.created/paid/cancelled)")
 	}
 
+	// Connexion Redis (cache)
+	redisConn, err := redisclient.Connect(cfg.RedisURL)
+	if err != nil {
+		logger.Warn().Err(err).Msg("Redis indisponible — cache desactive")
+	}
+	if redisConn != nil {
+		logger.Info().Msg("Redis connecte (cache commandes)")
+		defer redisConn.Close()
+	}
+
 	orderRepo := infrastructure.NewMongoOrderRepository(mongoClient)
 	catalogClient := infrastructure.NewCatalogClient(cfg.CatalogURL)
-	orderService := application.NewOrderService(orderRepo, publisher, catalogClient)
+	orderService := application.NewOrderService(orderRepo, publisher, catalogClient, redisConn)
 	handler := httpHandler.NewOrderHandler(orderService)
 
 	app := fiber.New(fiber.Config{

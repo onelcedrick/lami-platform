@@ -17,6 +17,7 @@ import (
 	"github.com/lami-platform/shared/pkg/middleware"
 	"github.com/lami-platform/shared/pkg/mongodb"
 	"github.com/lami-platform/shared/pkg/rabbitmq"
+	redisclient "github.com/lami-platform/shared/pkg/redis"
 	"github.com/lami-platform/shared/pkg/storage"
 	"github.com/lami-platform/services/catalog/internal/application"
 	"github.com/lami-platform/services/catalog/internal/infrastructure"
@@ -39,10 +40,21 @@ func main() {
 		_ = mongoClient.Disconnect(ctx)
 	}()
 
+	// Connexion Redis (cache)
+	redisConn, err := redisclient.Connect(cfg.RedisURL)
+	if err != nil {
+		logger.Warn().Err(err).Msg("Redis indisponible — cache desactive")
+	}
+	if redisConn != nil {
+		logger.Info().Msg("Redis connecte (cache produits)")
+		defer redisConn.Close()
+	}
+
 	productRepo := infrastructure.NewMongoProductRepository(mongoClient)
 	categoryRepo := infrastructure.NewMongoCategoryRepository(mongoClient)
 	discountRepo := infrastructure.NewMongoDiscountRepository(mongoClient)
-	catalogService := application.NewCatalogService(productRepo, categoryRepo, discountRepo)
+	reviewService := application.NewReviewService(reviewRepo, productRepo)
+	catalogService := application.NewCatalogService(productRepo, categoryRepo, discountRepo, redisConn)
 
 	// Object store (local ou MinIO selon l'env)
 	store, err := storage.NewFromEnv()
@@ -58,11 +70,18 @@ func main() {
 		logger.Warn().Err(err).Msg("RabbitMQ indisponible — stock non synchro auto")
 	} else {
 		defer rmq.Close()
-		_ = rmq.Subscribe(events.QueueCatalogStock, []string{
-			events.RoutingOrderCreated,
-			events.RoutingOrderPaid,
-			events.RoutingOrderCancelled,
-		}, catalogService.HandleOrderEvent)
+		_ = rmq.Subscribe(rabbitmq.SubscribeOptions{
+			Queue: events.QueueCatalogStock,
+			RoutingKeys: []string{
+				events.RoutingOrderCreated,
+				events.RoutingOrderPaid,
+				events.RoutingOrderCancelled,
+			},
+			Prefetch:     10,
+			MaxRetries:   3,
+			RetryBackoff: 1 * time.Second,
+			Handler:      catalogService.HandleOrderEvent,
+		})
 	}
 
 	// Seed automatique au demarrage (dev)

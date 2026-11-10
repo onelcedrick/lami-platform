@@ -45,7 +45,7 @@ export default function ChatWidget() {
   const openChat = useChatStore((s) => s.openChat);
   const closeChat = useChatStore((s) => s.closeChat);
   const toggleChat = useChatStore((s) => s.toggleChat);
-  const consumePendingMessage = useChatStore((s) => s.consumePendingMessage);
+  const consumePendingData = useChatStore((s) => s.consumePendingData);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,6 +92,15 @@ export default function ChatWidget() {
       ]);
     }
   }, [messages.length]);
+
+  // ✅ Clean Architecture : consomme le message ET le contexte depuis le store
+  useEffect(() => {
+    if (!open) return;
+    const { message, context } = consumePendingData();
+    if (message && !loading) {
+      send(message, context ?? undefined);
+    }
+  }, [open, consumePendingData]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -171,11 +180,14 @@ export default function ChatWidget() {
     setShowHistory(false);
   };
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (
+    forcedText?: string,
+    forcedContext?: import("@/lib/chat-types").ChatContextPayload
+  ) => {
+    const text = forcedText || input.trim();
     if (!text || loading) return;
 
-    setInput("");
+    if (!forcedText) setInput("");  // Ne vide pas l'input si c'est un contexte auto
     setMessages((m) => [...m, { role: "user", content: text }]);
     setLoading(true);
 
@@ -187,6 +199,7 @@ export default function ChatWidget() {
           message: text,
           conversation_id: conversationId,
           mode: "auto",
+          context: forcedContext,  // ✅ Contexte produit transmis au backend
         }),
       });
 

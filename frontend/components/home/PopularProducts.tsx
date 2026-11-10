@@ -7,6 +7,7 @@ import { formatAriary } from "@/lib/currency";
 import LazyImage from "@/components/ui/LazyImage";
 import { sortByPopularity, computePopularityScore } from "@/lib/popularity";
 import { StarIcon } from "@/components/ui/icons";
+import ProductGridSkeleton from "@/components/ui/ProductGridSkeleton";
 
 interface Product {
   id: string;
@@ -81,13 +82,8 @@ export default function PopularProducts() {
 
         {/* Grille produits */}
         {loading ? (
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="h-[420px] animate-pulse rounded-xl bg-[var(--bg-muted)]"
-              />
-            ))}
+          <div className="mt-10">
+            <ProductGridSkeleton count={4} />
           </div>
         ) : products.length === 0 ? (
           <p className="mt-10 text-center text-sm text-[var(--fg-muted)]">

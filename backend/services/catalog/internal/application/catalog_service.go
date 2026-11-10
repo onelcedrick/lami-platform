@@ -2,12 +2,16 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
-	"strings"
 	"time"
 
+	redisclient "github.com/lami-platform/shared/pkg/redis"
+	"regexp"
+	"strings"
 	"github.com/google/uuid"
 
 	shareddomain "github.com/lami-platform/shared/domain"
@@ -19,13 +23,67 @@ type CatalogService struct {
 	productRepo  domain.ProductRepository
 	categoryRepo domain.CategoryRepository
 	discountRepo domain.DiscountRepository
+	redis        *redisclient.Client
 }
 
-func NewCatalogService(productRepo domain.ProductRepository, categoryRepo domain.CategoryRepository, discountRepo domain.DiscountRepository) *CatalogService {
+func NewCatalogService(
+	productRepo domain.ProductRepository,
+	categoryRepo domain.CategoryRepository,
+	discountRepo domain.DiscountRepository,
+	redis *redisclient.Client,
+) *CatalogService {
 	return &CatalogService{
 		productRepo:  productRepo,
 		categoryRepo: categoryRepo,
 		discountRepo: discountRepo,
+		redis:        redis,
+	}
+}
+
+// ============================================================
+// CACHE REDIS
+// ============================================================
+const (
+	cacheProductPrefix   = "cache:product:"
+	cachePopularKey      = "cache:products:popular:"
+	cacheCategoriesKey   = "cache:categories"
+	cacheListPrefix      = "cache:products:list:"
+
+	productCacheTTL   = 10 * time.Minute
+	popularCacheTTL   = 5 * time.Minute
+	categoriesCacheTTL = 1 * time.Hour
+	listCacheTTL      = 2 * time.Minute
+)
+
+// hashFilter cree une cle unique pour un filtre.
+func hashFilter(v interface{}) string {
+	data, _ := json.Marshal(v)
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:8])
+}
+
+// invalidateProductCache supprime tout le cache produit.
+func (s *CatalogService) invalidateProductCache(ctx context.Context, productID string) {
+	if s.redis == nil {
+		return
+	}
+	keys := []string{
+		cacheProductPrefix + productID,
+		cacheCategoriesKey,
+	}
+	_ = s.redis.Del(ctx, keys...)
+
+	// Supprimer aussi toutes les listes en cache
+	raw := s.redis.Raw()
+	patterns := []string{
+		cachePopularKey + "*",
+		cacheListPrefix + "*",
+	}
+	for _, pattern := range patterns {
+		keys, err := raw.Keys(ctx, pattern).Result()
+		if err == nil && len(keys) > 0 {
+			_ = s.redis.Del(ctx, keys...)
+		}
 	}
 }
 
@@ -38,6 +96,18 @@ func slugify(s string) string {
 }
 
 func (s *CatalogService) CreateProduct(ctx context.Context, req shareddomain.CreateProductRequest) (*shareddomain.Product, error) {
+	defer func() {
+		if s.redis != nil {
+			raw := s.redis.Raw()
+			keys, _ := raw.Keys(ctx, cachePopularKey+"*").Result()
+			keys2, _ := raw.Keys(ctx, cacheListPrefix+"*").Result()
+			allKeys := append(keys, keys2...)
+			if len(allKeys) > 0 {
+				_ = s.redis.Del(ctx, allKeys...)
+			}
+		}
+	}()
+
 	now := time.Now().UTC()
 	product := &shareddomain.Product{
 		ID:               uuid.New().String(),
@@ -82,9 +152,23 @@ func (s *CatalogService) CreateProduct(ctx context.Context, req shareddomain.Cre
 }
 
 func (s *CatalogService) GetProduct(ctx context.Context, id string) (*shareddomain.Product, error) {
+	// 1. Essayer le cache
+	if s.redis != nil {
+		var cached shareddomain.Product
+		if err := s.redis.GetJSON(ctx, cacheProductPrefix+id, &cached); err == nil {
+			return &cached, nil
+		}
+	}
+
+	// 2. MongoDB
 	product, err := s.productRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	// 3. Mettre en cache (avant le tracking vues)
+	if s.redis != nil && product != nil {
+		_ = s.redis.SetJSON(ctx, cacheProductPrefix+id, product, productCacheTTL)
 	}
 	// Tracking vues (fire-and-forget pour la perf)
 	_ = s.productRepo.IncrementViews(ctx, id)
@@ -143,45 +227,37 @@ func (s *CatalogService) ListPopular(ctx context.Context, limit int) ([]shareddo
 	if limit < 1 {
 		limit = 8
 	}
-	products, err := s.productRepo.ListByPopularity(ctx, limit)
+
+	// 1. Essayer le cache
+	cacheKey := cachePopularKey + fmt.Sprintf("%d", limit)
+	if s.redis != nil {
+		var cached []shareddomain.Product
+		if err := s.redis.GetJSON(ctx, cacheKey, &cached); err == nil {
+			return cached, nil
+		}
+	}
+
+	// 2. MongoDB
+	products, _, err := s.listPopularPaged(ctx, shareddomain.ProductFilter{Limit: limit})
 	if err != nil {
 		return nil, err
 	}
-	// Re-rank avec le score complet
-	type ranked struct {
-		p shareddomain.Product
-		s float64
+
+	// 3. Cache
+	if s.redis != nil {
+		_ = s.redis.SetJSON(ctx, cacheKey, products, popularCacheTTL)
 	}
-	items := make([]ranked, 0, len(products))
-	for i := range products {
-		sc := ComputePopularityScore(&products[i])
-		products[i].PopularityScore = sc
-		items = append(items, ranked{p: products[i], s: sc})
-	}
-	// Sort desc
-	for i := 0; i < len(items); i++ {
-		for j := i + 1; j < len(items); j++ {
-			if items[j].s > items[i].s {
-				items[i], items[j] = items[j], items[i]
-			}
-		}
-	}
-	out := make([]shareddomain.Product, 0, limit)
-	for i, it := range items {
-		if i >= limit {
-			break
-		}
-		out = append(out, it.p)
-	}
-	return out, nil
+
+	return products, nil
 }
 
+
 func (s *CatalogService) listPopularPaged(ctx context.Context, filter shareddomain.ProductFilter) ([]shareddomain.Product, int64, error) {
-	all, err := s.ListPopular(ctx, filter.Limit)
+	products, err := s.productRepo.ListByPopularity(ctx, filter.Limit)
 	if err != nil {
 		return nil, 0, err
 	}
-	return all, int64(len(all)), nil
+	return products, int64(len(products)), nil
 }
 
 func (s *CatalogService) RecordSale(ctx context.Context, productID string, qty int) error {
@@ -232,6 +308,8 @@ func (s *CatalogService) ApplyOrderCancelled(ctx context.Context, items []struct
 }
 
 func (s *CatalogService) UpdateProduct(ctx context.Context, id string, req shareddomain.CreateProductRequest) (*shareddomain.Product, error) {
+	defer s.invalidateProductCache(ctx, id)
+
 	product, err := s.productRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -262,6 +340,8 @@ func (s *CatalogService) UpdateProduct(ctx context.Context, id string, req share
 }
 
 func (s *CatalogService) DeleteProduct(ctx context.Context, id string) error {
+	defer s.invalidateProductCache(ctx, id)
+
 	return s.productRepo.Delete(ctx, id)
 }
 
@@ -285,7 +365,26 @@ func (s *CatalogService) CreateCategory(ctx context.Context, name, description s
 }
 
 func (s *CatalogService) ListCategories(ctx context.Context) ([]shareddomain.Category, error) {
-	return s.categoryRepo.ListTree(ctx)
+	// 1. Essayer le cache
+	if s.redis != nil {
+		var cached []shareddomain.Category
+		if err := s.redis.GetJSON(ctx, cacheCategoriesKey, &cached); err == nil {
+			return cached, nil
+		}
+	}
+
+	// 2. MongoDB
+	categories, err := s.categoryRepo.ListTree(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Mettre en cache
+	if s.redis != nil {
+		_ = s.redis.SetJSON(ctx, cacheCategoriesKey, categories, categoriesCacheTTL)
+	}
+
+	return categories, nil
 }
 
 func (s *CatalogService) GetCategory(ctx context.Context, id string) (*shareddomain.Category, error) {

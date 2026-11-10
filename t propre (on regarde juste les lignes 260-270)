@@ -1,0 +1,102 @@
+[1mdiff --git a/backend/services/ia/app/agent/orchestrator.py b/backend/services/ia/app/agent/orchestrator.py[m
+[1mindex 2fa5b1f..1457677 100644[m
+[1m--- a/backend/services/ia/app/agent/orchestrator.py[m
+[1m+++ b/backend/services/ia/app/agent/orchestrator.py[m
+[36m@@ -223,10 +223,27 @@[m [mclass AgentOrchestrator:[m
+         conversation_id: Optional[str] = None,[m
+         auth_token: Optional[str] = None,[m
+         user_id: Optional[str] = None,[m
+[32m+[m[32m        context: Optional[Any] = None,[m
+     ) -> ChatResponse:[m
+         start = time.perf_counter()[m
+         conv_id = conversation_id or str(uuid4())[m
+         detected = self.detect_mode(message, mode)[m
+[32m+[m[41m        [m
+[32m+[m[32m        # ✅ FIX : Si on a une config en attente et qu'on demande de l'ajouter,[m
+[32m+[m[32m        # on force le mode commerce sans chercher de nouveaux produits.[m
+[32m+[m[32m        sess = self._session(conv_id)[m
+[32m+[m[32m        if sess.get("pending_build") and any(w in message.lower() for w in ["ajout", "panier", "oui", "ok", "valide"]):[m
+[32m+[m[32m            detected = "commerce"[m
+[32m+[m[32m            print(f"[ROUTING] Config en attente + demande d'ajout → mode commerce forcé")[m
+[32m+[m
+[32m+[m[32m        # ✅ Le contexte est prioritaire : forcer le mode commerce pour compatibility[m
+[32m+[m[32m        if context and hasattr(context, "intent") and context.intent == "compatibility":[m
+[32m+[m[32m            detected = "commerce"[m
+[32m+[m[32m            print(f"[ROUTING] Contexte compatibility → mode commerce forcé")[m
+[32m+[m[32m        # ✅ Le contexte est prioritaire : forcer le mode commerce pour compatibility[m
+[32m+[m[32m        if context and hasattr(context, "intent") and context.intent == "compatibility":[m
+[32m+[m[32m            detected = "commerce"[m
+[32m+[m[32m            print(f"[ROUTING] Contexte compatibility → mode commerce forcé")[m
+ [m
+         sess = self._session(conv_id)[m
+         if sess.get("pending_build") and mode == "auto":[m
+[36m@@ -247,11 +264,32 @@[m [mclass AgentOrchestrator:[m
+         if detected == "support":[m
+             reply, sources = await self._handle_support(message)[m
+         elif detected == "commerce":[m
+[31m-            reply, tool_results = await self._handle_commerce([m
+[31m-                message, conv_id=conv_id, auth_token=auth_token, user_id=user_id[m
+[31m-            )[m
+[32m+[m[32m            # ✅ Si contexte produit fourni : court-circuit vers get_product[m
+[32m+[m[32m            if context and hasattr(context, "product") and context.product:[m
+[32m+[m[32m                print(f"[COMMERCE] Contexte produit → get_product({context.product.id})")[m
+[32m+[m[32m                intents = [("get_product", {"product_id": context.product.id})][m
+[32m+[m[32m                reply, tool_results = await self._run_tools([m
+[32m+[m[32m                    intents, message,[m
+[32m+[m[32m                    conv_id=conv_id, auth_token=auth_token, user_id=user_id[m
+[32m+[m[32m                )[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                reply, tool_results = await self._handle_commerce([m
+[32m+[m[32m                    message, conv_id=conv_id, auth_token=auth_token, user_id=user_id[m
+[32m+[m[32m                )[m
+         else:[m
+[31m-            intents = self._extract_tool_intents(message, conv_id)[m
+[32m+[m[32m            # ✅ Si on a un pending_build et qu'on demande de l'ajouter, on le fait directement[m
+[32m+[m[32m        session = self._session(conv_id)[m
+[32m+[m[32m        if session.get("pending_build") and any(w in message.lower() for w in ["ajout", "panier", "oui", "ok", "valide"]):[m
+[32m+[m[32m            print(f"[COMMERCE] Ajout direct de la config en attente au panier")[m
+[32m+[m[32m            return await self._run_tools([m
+[32m+[m[32m                [("add_build_to_cart", {"build": session["pending_build"]})],[m
+[32m+[m[32m                message,[m
+[32m+[m[32m                conv_id=conv_id,[m
+[32m+[m[32m                auth_token=auth_token,[m
+[32m+[m[32m                user_id=user_id,[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m        intents = self._extract_tool_intents(message, conv_id)[m
+             if not intents and self._session(conv_id).pop("last_reject", None):[m
+                 reply = ([m
+                     "D'accord, rien n'a ete ajoute au panier. "[m
+[36m@@ -539,6 +577,32 @@[m [mclass AgentOrchestrator:[m
+                 + "Ouvrez le panier pour finaliser la commande."[m
+             )[m
+ [m
+[32m+[m[32m        # ✅ Résumé structuré pour get_product[m
+[32m+[m[32m        if name == "get_product":[m
+[32m+[m[32m            if raw.get("error"):[m
+[32m+[m[32m                return f"Produit: erreur - {raw['error']}"[m
+[32m+[m[32m            name_p = raw.get("name", "?")[m
+[32m+[m[32m            brand = raw.get("brand") or ""[m
+[32m+[m[32m            price = raw.get("price") or 0[m
+[32m+[m[32m            stock = raw.get("stock") or 0[m
+[32m+[m[32m            description = (raw.get("description") or "")[:300][m
+[32m+[m[32m            attrs = raw.get("attributes") or {}[m
+[32m+[m
+[32m+[m[32m            lines = [f"**{name_p}**"][m
+[32m+[m[32m            if brand:[m
+[32m+[m[32m                lines.append(f"Marque : {brand}")[m
+[32m+[m[32m            lines.append(f"Prix : {price:,.0f} Ar".replace(",", " "))[m
+[32m+[m[32m            lines.append(f"Stock : {stock}")[m
+[32m+[m[32m            if description:[m
+[32m+[m[32m                lines.append("")[m
+[32m+[m[32m                lines.append(description)[m
+[32m+[m[32m            if attrs:[m
+[32m+[m[32m                lines.append("")[m
+[32m+[m[32m                lines.append("**Spécifications :**")[m
+[32m+[m[32m                for k, v in list(attrs.items())[:8]:[m
+[32m+[m[32m                    lines.append(f"- {k} : {v}")[m
+[32m+[m[32m            return "\n".join(lines)[m
+[32m+[m
+         if name == "create_support_ticket":[m
+             return ([m
+                 f"Ticket cree: {raw.get('ticket_number')} "[m

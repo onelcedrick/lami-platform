@@ -311,3 +311,40 @@ func (h *UserHandler) DeleteAvatar(c *fiber.Ctx) error {
 		"avatar_url": user.AvatarURL,
 	})
 }
+
+
+// ============================================================
+// AJOUT : Preferences utilisateur
+// ============================================================
+
+func (h *UserHandler) GetPreferences(c *fiber.Ctx) error {
+	userID, _ := c.Locals("userID").(string)
+	if userID == "" {
+		return response.Unauthorized(c, "Non authentifie")
+	}
+
+	prefs, err := h.service.GetPreferences(c.Context(), userID)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Preferences", prefs)
+}
+
+func (h *UserHandler) UpdatePreferences(c *fiber.Ctx) error {
+	userID, _ := c.Locals("userID").(string)
+	if userID == "" {
+		return response.Unauthorized(c, "Non authentifie")
+	}
+
+	var prefs map[string]interface{}
+	if err := c.BodyParser(&prefs); err != nil {
+		return response.ValidationError(c, "Corps invalide")
+	}
+
+	if err := h.service.SavePreferences(c.Context(), userID, prefs); err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Preferences mises a jour", prefs)
+}

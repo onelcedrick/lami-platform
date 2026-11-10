@@ -95,3 +95,63 @@ func (h *AnalyticsHandler) ListActivities(c *fiber.Ctx) error {
 		"page": page, "limit": limit, "total": total,
 	})
 }
+
+
+// ============================================================
+// AJOUT : Temps reel (Redis)
+// ============================================================
+
+// GetOnline - GET /analytics/online
+func (h *AnalyticsHandler) GetOnline(c *fiber.Ctx) error {
+	count, err := h.service.GetOnlineCount(c.Context())
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+	return response.Success(c, fiber.StatusOK, "Visiteurs en ligne", fiber.Map{
+		"online": count,
+	})
+}
+
+// GetToday - GET /analytics/stats/today
+func (h *AnalyticsHandler) GetToday(c *fiber.Ctx) error {
+	stats, err := h.service.GetTodayStats(c.Context())
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+	online, _ := h.service.GetOnlineCount(c.Context())
+	stats["online"] = online
+
+	return response.Success(c, fiber.StatusOK, "Stats temps reel", stats)
+}
+
+// TrackProductView - POST /analytics/product-view
+func (h *AnalyticsHandler) TrackProductView(c *fiber.Ctx) error {
+	var body struct {
+		ProductID   string `json:"product_id"`
+		ProductName string `json:"product_name"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.ProductID == "" {
+		return response.ValidationError(c, "product_id requis")
+	}
+
+	if err := h.service.TrackProductView(c.Context(), body.ProductID, body.ProductName); err != nil {
+		return response.InternalError(c, err.Error())
+	}
+	return response.Success(c, fiber.StatusOK, "Vue enregistree", nil)
+}
+
+// GetTopProducts - GET /analytics/products/top
+func (h *AnalyticsHandler) GetTopProducts(c *fiber.Ctx) error {
+	limit := 5
+	if l := c.Query("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	products, err := h.service.GetTopProducts(c.Context(), limit)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+	return response.Success(c, fiber.StatusOK, "Top produits", products)
+}

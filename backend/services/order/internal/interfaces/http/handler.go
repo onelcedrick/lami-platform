@@ -103,8 +103,11 @@ func (h *OrderHandler) UpdateStatus(c *fiber.Ctx) error {
 		Status        shareddomain.OrderStatus   `json:"status"`
 		PaymentStatus shareddomain.PaymentStatus `json:"payment_status"`
 	}
-	if err := c.BodyParser(&body); err != nil || body.Status == "" {
-		return response.ValidationError(c, "Statut requis")
+	if err := c.BodyParser(&body); err != nil {
+		return response.ValidationError(c, "Body invalide")
+	}
+	if body.Status == "" && body.PaymentStatus == "" {
+		return response.ValidationError(c, "Statut ou payment_status requis")
 	}
 
 	order, err := h.service.UpdateStatus(c.Context(), id, body.Status, body.PaymentStatus)
@@ -215,6 +218,22 @@ func (h *OrderHandler) GetInvoice(c *fiber.Ctx) error {
 
 func (h *OrderHandler) GetInvoicePDF(c *fiber.Ctx) error {
 	id := c.Params("id")
+	userID, _ := c.Locals("userID").(string)
+	role, _ := c.Locals("role").(string)
+
+	// Verifier que la commande existe et que l'utilisateur y a acces
+	order, err := h.service.GetOrder(c.Context(), id)
+	if err != nil || order == nil {
+		return response.NotFound(c, "Commande introuvable")
+	}
+
+	// Admin : acces total
+	// Client : uniquement ses propres commandes
+	isAdmin := role == "admin" || role == "super_admin"
+	if !isAdmin && order.UserID != userID {
+		return response.Error(c, fiber.StatusForbidden, "Acces refuse")
+	}
+
 	data, filename, err := h.service.BuildInvoicePDF(c.Context(), id)
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error())

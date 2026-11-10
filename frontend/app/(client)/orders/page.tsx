@@ -28,15 +28,59 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 function paymentLabel(order: Order): { text: string; tone: string } {
-  if (order.status === "cancelled") return { text: "Annulée", tone: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" };
-  if (order.payment_status === "paid") return { text: "Payée", tone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" };
-  if (order.payment_status === "pending" || order.status === "pending" || order.status === "confirmed") {
-    return { text: "En attente de paiement", tone: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" };
+  // PRIORITE 1 : annulee
+  if (order.status === "cancelled") {
+    return {
+      text: "Annulee",
+      tone: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300",
+    };
   }
-  if (order.status === "shipped" || order.status === "delivered") {
-    return { text: "Payée", tone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" };
+
+  // PRIORITE 2 : payee (peu importe la methode)
+  if (order.payment_status === "paid") {
+    return {
+      text: "Payee",
+      tone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+    };
   }
-  return { text: order.payment_status || order.status, tone: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" };
+
+  // PRIORITE 3 : livree (mais non payee)
+  if (order.status === "delivered") {
+    return {
+      text: "Livree",
+      tone: "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
+    };
+  }
+
+  // PRIORITE 4 : expediee
+  if (order.status === "shipped") {
+    return {
+      text: "Expediee",
+      tone: "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
+    };
+  }
+
+  // PRIORITE 5 : paiement en boutique en attente
+  if (order.payment_method === "store" && order.payment_status === "pending") {
+    return {
+      text: "A payer en boutique",
+      tone: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+    };
+  }
+
+  // PRIORITE 6 : en attente de paiement (Mobile Money)
+  if (order.payment_status === "pending") {
+    return {
+      text: "En attente de paiement",
+      tone: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+    };
+  }
+
+  // Fallback
+  return {
+    text: order.payment_status || order.status,
+    tone: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  };
 }
 
 function shortDate(iso: string): string {
@@ -160,6 +204,8 @@ export default function ClientOrdersPage() {
             const shortId = (o.order_number || o.id).replace(/^ORD-?/i, "");
             const count = itemsCount(o);
             const isPaid = o.payment_status === "paid";
+            const isStore = o.payment_method === "store";
+            const canDownloadInvoice = isPaid || (isStore && o.status !== "cancelled");
             const providerLabel = PROVIDER_LABELS[o.payment_method || ""] || o.payment_method;
 
             return (
@@ -173,7 +219,7 @@ export default function ClientOrdersPage() {
                   <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${badge.tone}`}>{badge.text}</span>
                 </div>
 
-                {isPaid && o.payment_reference && (
+                {isPaid && (
                   <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
                     <div className="flex items-start gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
@@ -181,10 +227,24 @@ export default function ClientOrdersPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                          Paiement confirmé {providerLabel ? `· ${providerLabel}` : ""}
+                          {isStore
+                            ? "Paiement confirmé · En boutique"
+                            : `Paiement confirmé${providerLabel ? ` · ${providerLabel}` : ""}`}
                         </p>
-                        <p className="mt-0.5 break-all font-mono text-sm font-semibold text-emerald-900 dark:text-emerald-200">{o.payment_reference}</p>
-                        {o.paid_at && <p className="mt-0.5 text-[11px] text-emerald-700/80 dark:text-emerald-400/80">{shortDateTime(o.paid_at)}</p>}
+                        {o.payment_reference ? (
+                          <p className="mt-0.5 break-all font-mono text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                            {o.payment_reference}
+                          </p>
+                        ) : isStore ? (
+                          <p className="mt-0.5 text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                            Commande reglee en boutique
+                          </p>
+                        ) : null}
+                        {o.paid_at && (
+                          <p className="mt-0.5 text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
+                            {shortDateTime(o.paid_at)}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -196,7 +256,7 @@ export default function ClientOrdersPage() {
                     <p className="mt-0.5 text-2xl font-bold text-[var(--fg-accent)]">{formatAriary(o.total)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {isPaid && (
+                    {canDownloadInvoice && (
                       <button
                         type="button" onClick={() => handleDownloadInvoice(o)} disabled={downloadingId === o.id}
                         className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2 text-sm font-medium text-[var(--fg-secondary)] transition hover:border-[var(--fg-accent)] hover:text-[var(--fg-accent)] disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"

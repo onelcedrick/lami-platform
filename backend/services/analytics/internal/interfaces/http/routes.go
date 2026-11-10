@@ -27,6 +27,12 @@ func SetupRoutes(
 	// KPIs temps reel
 	api.Get("/kpi", liveHandler.KPI)
 
+	// ✅ NOUVEAU : Temps reel (Redis)
+	api.Get("/online", handler.GetOnline)
+	api.Get("/stats/today", handler.GetToday)
+	api.Get("/products/top", handler.GetTopProducts)
+	api.Post("/product-view", handler.TrackProductView)
+
 	// Public : tracking visiteurs anonymes
 	api.Post("/visit", handler.TrackVisit)
 

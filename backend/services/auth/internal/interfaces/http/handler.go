@@ -5,6 +5,7 @@ import (
 
 	shareddomain "github.com/lami-platform/shared/domain"
 	"github.com/lami-platform/shared/pkg/response"
+	"github.com/lami-platform/shared/pkg/jwt"
 	"github.com/lami-platform/services/auth/internal/application"
 )
 
@@ -127,5 +128,78 @@ func (h *AuthHandler) GoogleCallback(c *fiber.Ctx) error {
 func (h *AuthHandler) GoogleStatus(c *fiber.Ctx) error {
 	return response.Success(c, fiber.StatusOK, "Statut OAuth Google", fiber.Map{
 		"enabled": h.authService.IsGoogleOAuthEnabled(),
+	})
+}
+
+
+// ============================================================
+// AJOUT : Logout + Sessions
+// ============================================================
+
+func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	userID, _ := c.Locals("userID").(string)
+	accessJTI, _ := c.Locals("jti").(string)
+
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	_ = c.BodyParser(&body)
+
+	// Extraire le JTI du refresh token
+	refreshJTI := ""
+	if body.RefreshToken != "" {
+		if claims, err := jwt.ValidateToken(body.RefreshToken, h.authService.JWTSecret()); err == nil {
+			refreshJTI = claims.ID
+		}
+	}
+
+	if err := h.authService.Logout(c.Context(), userID, accessJTI, refreshJTI); err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Deconnecte", nil)
+}
+
+func (h *AuthHandler) ListSessions(c *fiber.Ctx) error {
+	userID, _ := c.Locals("userID").(string)
+	if userID == "" {
+		return response.Unauthorized(c, "Non authentifie")
+	}
+
+	sessions, err := h.authService.ListSessions(c.Context(), userID)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Sessions actives", sessions)
+}
+
+func (h *AuthHandler) RevokeSession(c *fiber.Ctx) error {
+	userID, _ := c.Locals("userID").(string)
+	jti := c.Params("jti")
+	if userID == "" || jti == "" {
+		return response.ValidationError(c, "userID et jti requis")
+	}
+
+	if err := h.authService.RevokeSession(c.Context(), userID, jti); err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Session revoquee", nil)
+}
+
+func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
+	userID, _ := c.Locals("userID").(string)
+	if userID == "" {
+		return response.Unauthorized(c, "Non authentifie")
+	}
+
+	count, err := h.authService.RevokeAllSessions(c.Context(), userID)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, fiber.StatusOK, "Toutes les sessions revoquees", fiber.Map{
+		"revoked": count,
 	})
 }

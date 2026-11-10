@@ -17,6 +17,7 @@ import (
 	"github.com/lami-platform/shared/pkg/middleware"
 	"github.com/lami-platform/shared/pkg/mongodb"
 	"github.com/lami-platform/shared/pkg/rabbitmq"
+	redisclient "github.com/lami-platform/shared/pkg/redis"
 	"github.com/lami-platform/services/analytics/internal/application"
 	"github.com/lami-platform/services/analytics/internal/infrastructure"
 	httpHandler "github.com/lami-platform/services/analytics/internal/interfaces/http"
@@ -49,9 +50,19 @@ func main() {
 	healthChecker := application.NewHealthChecker(hub)
 	kpiAggregator := application.NewKPIAggregator(analyticsDB, orderDB, ticketDB, iaDB)
 
+	// Connexion Redis (temps reel)
+	redisConn, err := redisclient.Connect(cfg.RedisURL)
+	if err != nil {
+		logger.Warn().Err(err).Msg("Redis indisponible — stats temps reel off")
+	}
+	if redisConn != nil {
+		logger.Info().Msg("Redis connecte (stats temps reel)")
+		defer redisConn.Close()
+	}
+
 	visitorRepo := infrastructure.NewMongoVisitorRepository(mongoClient)
 	activityRepo := infrastructure.NewMongoActivityRepository(mongoClient)
-	service := application.NewAnalyticsService(visitorRepo, activityRepo, hub)
+	service := application.NewAnalyticsService(visitorRepo, activityRepo, hub, redisConn)
 	handler := httpHandler.NewAnalyticsHandler(service)
 	liveHandler := httpHandler.NewLiveHandler(hub, healthChecker, kpiAggregator)
 
@@ -64,11 +75,18 @@ func main() {
 		logger.Warn().Err(err).Msg("RabbitMQ indisponible - analytics evenements off")
 	} else {
 		defer rmq.Close()
-		_ = rmq.Subscribe(events.QueueAnalyticsOrders, []string{
-			events.RoutingOrderCreated,
-			events.RoutingOrderPaid,
-			events.RoutingOrderCancelled,
-		}, service.HandleOrderEvent)
+		_ = rmq.Subscribe(rabbitmq.SubscribeOptions{
+			Queue: events.QueueAnalyticsOrders,
+			RoutingKeys: []string{
+				events.RoutingOrderCreated,
+				events.RoutingOrderPaid,
+				events.RoutingOrderCancelled,
+			},
+			Prefetch:     10,
+			MaxRetries:   3,
+			RetryBackoff: 1 * time.Second,
+			Handler:      service.HandleOrderEvent,
+		})
 	}
 
 	app := fiber.New(fiber.Config{

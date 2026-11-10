@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import ProductCard from "@/components/catalog/ProductCard";
+import ProductGridSkeleton from "@/components/ui/ProductGridSkeleton";
 import ProductListItem from "@/components/catalog/ProductListItem";
 import FilterSidebar from "@/components/catalog/FilterSidebar";
 import CatalogToolbar, { SortKey, ViewMode } from "@/components/catalog/CatalogToolbar";
@@ -188,9 +189,14 @@ function CatalogInner() {
 
           <div className="mt-6">
             {loading ? (
-              <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "space-y-3"}>
-                {Array.from({ length: 8 }).map((_, i) => <ProductSkeleton key={i} viewMode={viewMode} />)}
-              </div>
+              <ProductGridSkeleton
+                count={8}
+                className={
+                  viewMode === "grid"
+                    ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                    : "space-y-3"
+                }
+              />
             ) : products.length === 0 ? (
               <div className="card py-20 text-center">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--bg-muted)]">
@@ -255,32 +261,6 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   );
 }
 
-function ProductSkeleton({ viewMode }: { viewMode: ViewMode }) {
-  if (viewMode === "list") {
-    return (
-      <div className="card flex gap-4 p-4">
-        <div className="h-32 w-32 shrink-0 animate-pulse rounded-xl bg-[var(--bg-muted)]" />
-        <div className="flex-1 space-y-3">
-          <div className="h-3 w-16 animate-pulse rounded bg-[var(--bg-muted)]" />
-          <div className="h-5 w-3/4 animate-pulse rounded bg-[var(--bg-muted)]" />
-          <div className="h-4 w-1/2 animate-pulse rounded bg-[var(--bg-muted)]" />
-          <div className="h-9 w-32 animate-pulse rounded-lg bg-[var(--bg-muted)]" />
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="card overflow-hidden">
-      <div className="aspect-[4/3] animate-pulse bg-[var(--bg-muted)]" />
-      <div className="space-y-3 p-4">
-        <div className="h-2.5 w-16 animate-pulse rounded bg-[var(--bg-muted)]" />
-        <div className="h-4 w-3/4 animate-pulse rounded bg-[var(--bg-muted)]" />
-        <div className="h-5 w-24 animate-pulse rounded bg-[var(--bg-muted)]" />
-        <div className="h-9 w-full animate-pulse rounded-lg bg-[var(--bg-muted)]" />
-      </div>
-    </div>
-  );
-}
 
 export default function CatalogPage() {
   return (

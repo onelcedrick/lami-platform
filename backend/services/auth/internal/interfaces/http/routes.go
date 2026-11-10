@@ -18,4 +18,8 @@ func SetupRoutes(app *fiber.App, handler *AuthHandler, jwtSecret string) {
 
 	protected := api.Group("", middleware.AuthRequired(jwtSecret))
 	protected.Get("/profile", handler.Profile)
+	protected.Post("/logout", handler.Logout)
+	protected.Get("/sessions", handler.ListSessions)
+	protected.Delete("/sessions/:jti", handler.RevokeSession)
+	protected.Delete("/sessions", handler.RevokeAllSessions)
 }

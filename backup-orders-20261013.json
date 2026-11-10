@@ -1,0 +1,1017 @@
+Backup : 25 commandes
+[
+  {
+    _id: 'aab032ed-d2d9-49b1-a90c-f1e0788efe5f',
+    order_number: 'ORD-20260910-aedad9da',
+    user_id: 'b7dab107-e478-425d-9a42-f5f1bce3b1eb',
+    items: [
+      {
+        product_id: '0d5da8a9-cf54-4a40-8953-9a9817b5afb8',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 2499.99,
+        total_price: 2499.99
+      }
+    ],
+    sub_total: 2499.99,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 0,
+    total: 12499.99,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'mvola',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0344444444',
+    created_at: ISODate('2026-09-10T12:08:59.193Z'),
+    updated_at: ISODate('2026-09-13T08:07:48.090Z')
+  },
+  {
+    _id: 'e4ffb61b-7101-4e53-80c5-343ae18967c9',
+    order_number: 'ORD-20260910-c21300d8',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: 'cbb583ba-c230-4430-8595-a2af8c246699',
+        product_name: 'Samsung 990 PRO 2TB',
+        sku: 'SSD-SAM-990PRO-2T',
+        quantity: 4,
+        unit_price: 189.99,
+        total_price: 759.96
+      }
+    ],
+    sub_total: 759.96,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 0,
+    total: 10759.96,
+    status: 'cancelled',
+    payment_status: 'refunded',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-10T13:24:00.323Z'),
+    updated_at: ISODate('2026-09-10T13:24:33.403Z')
+  },
+  {
+    _id: '228924ff-87cb-4e8a-9787-8c8db59b5baf',
+    order_number: 'ORD-20260910-42b27514',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: 'fbd21147-6166-4841-95fc-7b98945deecd',
+        product_name: 'AMD Ryzen 7 7800X3D',
+        sku: 'CPU-AMD-7800X3D',
+        quantity: 16,
+        unit_price: 449.99,
+        total_price: 7199.84
+      },
+      {
+        product_id: '0d5da8a9-cf54-4a40-8953-9a9817b5afb8',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 2499.99,
+        total_price: 2499.99
+      }
+    ],
+    sub_total: 9699.83,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 0,
+    total: 19699.83,
+    status: 'cancelled',
+    payment_status: 'refunded',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-10T13:24:08.927Z'),
+    updated_at: ISODate('2026-09-10T13:24:35.409Z')
+  },
+  {
+    _id: 'ea50ef0a-f350-4aa9-9ca3-d414fa63b559',
+    order_number: 'ORD-20260910-88937e3e',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: '0d5da8a9-cf54-4a40-8953-9a9817b5afb8',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 2499.99,
+        total_price: 2499.99
+      }
+    ],
+    sub_total: 2499.99,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 0,
+    total: 12499.99,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-10T13:24:54.696Z'),
+    updated_at: ISODate('2026-09-13T08:07:12.030Z')
+  },
+  {
+    _id: 'beed25ea-e54b-443d-a9c8-bdfead079f35',
+    order_number: 'ORD-20260910-2e9003bd',
+    user_id: '971b3502-9745-4428-9929-4121193ade9f',
+    items: [
+      {
+        product_id: 'fbd21147-6166-4841-95fc-7b98945deecd',
+        product_name: 'AMD Ryzen 7 7800X3D',
+        sku: 'CPU-AMD-7800X3D',
+        quantity: 1,
+        unit_price: 449.99,
+        total_price: 449.99
+      }
+    ],
+    sub_total: 449.99,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 0,
+    total: 10449.99,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'airtel_money',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 032222224 | Tel: 0342772776 | Tel: 03355555555',
+    created_at: ISODate('2026-09-10T15:09:59.604Z'),
+    updated_at: ISODate('2026-09-13T08:06:44.649Z')
+  },
+  {
+    _id: 'cba3fe94-974a-495a-804c-d2ceee3d0288',
+    order_number: 'ORD-20260910-cc9f0ef9',
+    user_id: '971b3502-9745-4428-9929-4121193ade9f',
+    items: [
+      {
+        product_id: 'e06a510c-75a4-400a-b9c8-d9ea79eaee90',
+        product_name: 'Alimentation V2',
+        sku: 'ALIM-LAMI-TV',
+        quantity: 1,
+        unit_price: 500000,
+        total_price: 500000
+      }
+    ],
+    sub_total: 500000,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 0,
+    total: 500000,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-10T18:20:29.399Z'),
+    updated_at: ISODate('2026-09-10T18:22:17.231Z')
+  },
+  {
+    _id: '6a1c3e21-1398-487e-991c-6be9aa229ae2',
+    order_number: 'ORD-20260912-9d330420',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: '0d5da8a9-cf54-4a40-8953-9a9817b5afb8',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 2499.99,
+        total_price: 2499.99
+      },
+      {
+        product_id: 'cbb583ba-c230-4430-8595-a2af8c246699',
+        product_name: 'Samsung 990 PRO 2TB',
+        sku: 'SSD-SAM-990PRO-2T',
+        quantity: 1,
+        unit_price: 161.4915,
+        total_price: 161.4915
+      }
+    ],
+    sub_total: 2661.4815,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 28.498500000000007,
+    total: 12661.4815,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-12T18:58:30.501Z'),
+    updated_at: ISODate('2026-09-12T19:26:21.154Z')
+  },
+  {
+    _id: '2d3f85a9-4883-430d-bebb-cb7c03bd6445',
+    order_number: 'ORD-20260913-de77285d',
+    user_id: '971b3502-9745-4428-9929-4121193ade9f',
+    items: [
+      {
+        product_id: 'fbd21147-6166-4841-95fc-7b98945deecd',
+        product_name: 'AMD Ryzen 7 7800X3D',
+        sku: 'CPU-AMD-7800X3D',
+        quantity: 1,
+        unit_price: 0,
+        total_price: 0
+      },
+      {
+        product_id: 'e06a510c-75a4-400a-b9c8-d9ea79eaee90',
+        product_name: 'Alimentation V2',
+        sku: 'ALIM-LAMI-TV',
+        quantity: 1,
+        unit_price: 500000,
+        total_price: 500000
+      }
+    ],
+    sub_total: 500000,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 449.99,
+    total: 500000,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'orange_money',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 03255555555555',
+    created_at: ISODate('2026-09-13T08:02:10.982Z'),
+    updated_at: ISODate('2026-09-13T08:08:20.216Z')
+  },
+  {
+    _id: 'cf13de85-e857-4f7c-9806-1472e301dd87',
+    order_number: 'ORD-20260913-85caef06',
+    user_id: '971b3502-9745-4428-9929-4121193ade9f',
+    items: [
+      {
+        product_id: '2f36b913-b1ff-494b-980d-505886fdee64',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 2499.99,
+        total_price: 2499.99
+      }
+    ],
+    sub_total: 2499.99,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 0,
+    total: 12499.99,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'mvola',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Fianarantsoa',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Fianarantsoa',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0344444444444',
+    created_at: ISODate('2026-09-13T08:10:17.844Z'),
+    updated_at: ISODate('2026-09-13T08:12:02.373Z')
+  },
+  {
+    _id: '84e44039-6cc0-4cd8-8699-11dc28859dfc',
+    order_number: 'ORD-20260914-674e3d64',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: '8f18661c-f2b2-4ff2-b17e-f6d58c58ffa5',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 2499.99,
+        total_price: 2499.99
+      }
+    ],
+    sub_total: 2499.99,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 0,
+    total: 12499.99,
+    status: 'cancelled',
+    payment_status: 'refunded',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-14T06:46:53.867Z'),
+    updated_at: ISODate('2026-09-14T16:08:50.839Z')
+  },
+  {
+    _id: '78e84971-0818-4ee2-9f8e-3a87b9e0f212',
+    order_number: 'ORD-20260914-cf2e6e68',
+    user_id: '2566653c-f9d2-4f79-b821-c71a0c9520c5',
+    items: [
+      {
+        product_id: 'fbd21147-6166-4841-95fc-7b98945deecd',
+        product_name: 'AMD Ryzen 7 7800X3D',
+        sku: 'CPU-AMD-7800X3D',
+        quantity: 1,
+        unit_price: 0,
+        total_price: 0
+      },
+      {
+        product_id: '8f18661c-f2b2-4ff2-b17e-f6d58c58ffa5',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 4,
+        unit_price: 2499.99,
+        total_price: 9999.96
+      }
+    ],
+    sub_total: 9999.96,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 449.99,
+    total: 19999.96,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-14T06:54:21.098Z'),
+    updated_at: ISODate('2026-09-16T11:31:04.042Z')
+  },
+  {
+    _id: '3bf56591-cf57-4a38-85e6-5fb306c65c95',
+    order_number: 'ORD-20260914-4cb1eb97',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: '919259de-466e-4f1c-8541-0cafb663be14',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 2499.99,
+        total_price: 2499.99
+      }
+    ],
+    sub_total: 2499.99,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 0,
+    total: 12499.99,
+    status: 'cancelled',
+    payment_status: 'pending',
+    payment_method: 'orange_money',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0325555555',
+    created_at: ISODate('2026-09-14T09:25:55.573Z'),
+    updated_at: ISODate('2026-09-16T10:57:22.415Z')
+  },
+  {
+    _id: 'be098d46-591c-43aa-8e3d-ff567281f632',
+    order_number: 'ORD-20260914-9499e65a',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: '0d5da8a9-cf54-4a40-8953-9a9817b5afb8',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 11000000,
+        total_price: 11000000
+      }
+    ],
+    sub_total: 11000000,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 0,
+    total: 11000000,
+    status: 'cancelled',
+    payment_status: 'refunded',
+    payment_method: 'mvola',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0343333333 | Tel: 034222222',
+    created_at: ISODate('2026-09-14T11:37:52.643Z'),
+    updated_at: ISODate('2026-09-14T16:08:43.202Z')
+  },
+  {
+    _id: '230b029f-d101-4794-8d88-459ace072838',
+    order_number: 'ORD-20260914-ff4289d3',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: 'e06a510c-75a4-400a-b9c8-d9ea79eaee90',
+        product_name: 'Alimentation V2',
+        sku: 'ALIM-LAMI-TV',
+        quantity: 1,
+        unit_price: 500000,
+        total_price: 500000
+      }
+    ],
+    sub_total: 500000,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 0,
+    total: 500000,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'mvola',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0342356787',
+    created_at: ISODate('2026-09-14T16:08:37.395Z'),
+    updated_at: ISODate('2026-10-01T19:45:01.623Z')
+  },
+  {
+    _id: 'c82b7e62-0f91-4996-89f3-201fd225c241',
+    order_number: 'ORD-20260914-12e43188',
+    user_id: 'bbe0fdd7-3ab7-40e5-aa25-87bb3951047a',
+    items: [
+      {
+        product_id: '87ecae19-4a4b-4624-be1d-5674a9e884e6',
+        product_name: 'NVIDIA GeForce RTX 4070 Ti',
+        sku: 'GPU-NV-4070TI',
+        quantity: 1,
+        unit_price: 3510000,
+        total_price: 3510000
+      }
+    ],
+    sub_total: 3510000,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 390000,
+    total: 3510000,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Tanambao 5 lot tst akaiky tetezana',
+      city: 'Toamasina',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-14T16:33:16.201Z'),
+    updated_at: ISODate('2026-09-16T11:30:35.962Z')
+  },
+  {
+    _id: '7afd6e62-7e33-40cf-b027-3c5bbf6dab13',
+    order_number: 'ORD-20260917-dd5bfbce',
+    user_id: '52b8c163-15ac-4e80-8536-d67551ad6925',
+    items: [
+      {
+        product_id: 'fbd21147-6166-4841-95fc-7b98945deecd',
+        product_name: 'AMD Ryzen 7 7800X3D',
+        sku: 'CPU-AMD-7800X3D',
+        quantity: 1,
+        unit_price: 2300000,
+        total_price: 2300000,
+        image_url: 'http://localhost:9000/lami-uploads/products/f86ce5a7-2068-41c0-8808-cb1c20d6a892-1789551729.png'
+      },
+      {
+        product_id: '966684b6-af7c-4c07-8e56-896b5132f370',
+        product_name: 'Odyssey OLED G6',
+        sku: 'ODY-OLED-G6',
+        quantity: 1,
+        unit_price: 800000,
+        total_price: 800000,
+        image_url: 'http://localhost:9000/lami-uploads/products/17f8bec3-ea5a-41a0-aa9b-9da94b8ad115-1789555332.jpg'
+      },
+      {
+        product_id: 'dc35c5d8-6b4f-4342-bded-5e73436a1de4',
+        product_name: 'Imprimante Canon',
+        sku: 'IMP-CAN-COL',
+        quantity: 1,
+        unit_price: 900099,
+        total_price: 900099,
+        image_url: 'http://localhost:9000/lami-uploads/products/e8e3f44d-8130-4211-ba5b-53e7a6fd689c-1789556372.jpg'
+      }
+    ],
+    sub_total: 4000099,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 99901,
+    total: 4000099,
+    status: 'cancelled',
+    payment_status: 'refunded',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '301',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-17T04:58:24.404Z'),
+    updated_at: ISODate('2026-09-17T04:58:31.995Z')
+  },
+  {
+    _id: 'baf23ec5-2642-4e4d-9327-67ff2276c780',
+    order_number: 'ORD-20260917-43fc96f0',
+    user_id: '52b8c163-15ac-4e80-8536-d67551ad6925',
+    items: [
+      {
+        product_id: 'dc35c5d8-6b4f-4342-bded-5e73436a1de4',
+        product_name: 'Imprimante Canon',
+        sku: 'IMP-CAN-COL',
+        quantity: 1,
+        unit_price: 900099,
+        total_price: 900099,
+        image_url: 'http://localhost:9000/lami-uploads/products/e8e3f44d-8130-4211-ba5b-53e7a6fd689c-1789556372.jpg'
+      },
+      {
+        product_id: 'fbd21147-6166-4841-95fc-7b98945deecd',
+        product_name: 'AMD Ryzen 7 7800X3D',
+        sku: 'CPU-AMD-7800X3D',
+        quantity: 1,
+        unit_price: 2300000,
+        total_price: 2300000,
+        image_url: 'http://localhost:9000/lami-uploads/products/f86ce5a7-2068-41c0-8808-cb1c20d6a892-1789551729.png'
+      },
+      {
+        product_id: '99c65ed4-f022-4283-b734-cd63eeabb2b5',
+        product_name: 'Corsair Vengeance 32GB DDR5-6000',
+        sku: 'RAM-COR-32GB-6000',
+        quantity: 1,
+        unit_price: 800000,
+        total_price: 800000,
+        image_url: 'http://localhost:9000/lami-uploads/products/b584d342-025e-4858-aa70-1594820812b3-1789551712.jpg'
+      }
+    ],
+    sub_total: 4000099,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 99901,
+    total: 4000099,
+    status: 'delivered',
+    payment_status: 'paid',
+    payment_method: 'orange_money',
+    payment_reference: 'OM260917.0502.612C7',
+    paid_at: ISODate('2026-09-17T05:02:36.551Z'),
+    shipping_address: {
+      street: 'Bazar Kely Adventiste, ',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0320000000',
+    invoice_number: 'FAC-20260917-43fc96f0',
+    created_at: ISODate('2026-09-17T05:00:09.124Z'),
+    updated_at: ISODate('2026-10-01T19:44:50.627Z')
+  },
+  {
+    _id: 'e4cf519f-e049-4918-a3be-2162b093691f',
+    order_number: 'ORD-20260921-e5223c08',
+    user_id: '8cbb27c3-c7ec-4bc0-a183-bba2295944c8',
+    items: [
+      {
+        product_id: 'fbd21147-6166-4841-95fc-7b98945deecd',
+        product_name: 'AMD Ryzen 7 7800X3D',
+        sku: 'CPU-AMD-7800X3D',
+        quantity: 1,
+        unit_price: 2300000,
+        total_price: 2300000,
+        image_url: 'http://localhost:9000/lami-uploads/products/f86ce5a7-2068-41c0-8808-cb1c20d6a892-1789551729.png'
+      },
+      {
+        product_id: '99c65ed4-f022-4283-b734-cd63eeabb2b5',
+        product_name: 'Corsair Vengeance 32GB DDR5-6000',
+        sku: 'RAM-COR-32GB-6000',
+        quantity: 1,
+        unit_price: 800000,
+        total_price: 800000,
+        image_url: 'http://localhost:9000/lami-uploads/products/b584d342-025e-4858-aa70-1594820812b3-1789551712.jpg'
+      },
+      {
+        product_id: 'e06a510c-75a4-400a-b9c8-d9ea79eaee90',
+        product_name: 'Alimentation V2',
+        sku: 'ALIM-LAMI-TV',
+        quantity: 1,
+        unit_price: 500000,
+        total_price: 500000,
+        image_url: 'http://localhost:9000/lami-uploads/products/6e250b0f-4191-46d5-ae97-23d99c536c31-1789541807.jpg'
+      }
+    ],
+    sub_total: 3600000,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 0,
+    total: 3600000,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-21T06:49:39.343Z'),
+    updated_at: ISODate('2026-10-01T19:48:23.196Z')
+  },
+  {
+    _id: '05cc0009-8bd2-4e1e-a98f-f8f801ded00c',
+    order_number: 'ORD-20260921-a98852a9',
+    user_id: '52b8c163-15ac-4e80-8536-d67551ad6925',
+    items: [
+      {
+        product_id: '0d5da8a9-cf54-4a40-8953-9a9817b5afb8',
+        product_name: "PC Gaming L'AMI Ultimate",
+        sku: 'PC-LAMI-ULTIMATE',
+        quantity: 1,
+        unit_price: 11000000,
+        total_price: 11000000,
+        image_url: 'http://localhost:9000/lami-uploads/products/7c021fda-f744-4bba-ba70-7155ec0b0109-1789551590.jpg'
+      }
+    ],
+    sub_total: 11000000,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 0,
+    total: 11000000,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-21T07:09:38.754Z'),
+    updated_at: ISODate('2026-09-21T07:15:27.731Z')
+  },
+  {
+    _id: 'f00e9769-8c7d-4f2d-bedc-65d74867dc22',
+    order_number: 'ORD-20260921-c3e144bd',
+    user_id: '52b8c163-15ac-4e80-8536-d67551ad6925',
+    items: [
+      {
+        product_id: 'cf62092c-3e14-4b0e-8c06-f9734fdd2d69',
+        product_name: 'Imprimante V4 Numerique',
+        sku: 'IMP-V4-NUM',
+        quantity: 1,
+        unit_price: 550099,
+        total_price: 550099,
+        image_url: 'http://localhost:9000/lami-uploads/products/fc538330-f567-45ff-ad61-4d2a5f7eb81a-1789557602.jpg'
+      }
+    ],
+    sub_total: 550099,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 99901,
+    total: 550099,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Mangarano akaiky Pompe',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-09-21T07:13:44.033Z'),
+    updated_at: ISODate('2026-09-21T07:15:22.711Z')
+  },
+  {
+    _id: '7f58cb72-6282-4722-9b01-3b170ceba406',
+    order_number: 'ORD-20260921-0b3ac57e',
+    user_id: '52b8c163-15ac-4e80-8536-d67551ad6925',
+    items: [
+      {
+        product_id: '966684b6-af7c-4c07-8e56-896b5132f370',
+        product_name: 'Odyssey OLED G6',
+        sku: 'ODY-OLED-G6',
+        quantity: 1,
+        unit_price: 800000,
+        total_price: 800000,
+        image_url: 'http://localhost:9000/lami-uploads/products/17f8bec3-ea5a-41a0-aa9b-9da94b8ad115-1789555332.jpg'
+      }
+    ],
+    sub_total: 800000,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 0,
+    total: 800000,
+    status: 'delivered',
+    payment_status: 'paid',
+    payment_method: 'airtel_money',
+    payment_reference: 'AM260921.0716.AFCBF',
+    paid_at: ISODate('2026-09-21T07:16:25.082Z'),
+    shipping_address: {
+      street: 'Mangarano ampitan Layda',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0331542324',
+    created_at: ISODate('2026-09-21T07:16:10.733Z'),
+    updated_at: ISODate('2026-09-21T07:16:58.776Z')
+  },
+  {
+    _id: '3615690c-c537-4356-9a96-2e4fbf173d4d',
+    order_number: 'ORD-20260927-a003026c',
+    user_id: '52b8c163-15ac-4e80-8536-d67551ad6925',
+    items: [
+      {
+        product_id: 'efa242f2-e4d7-4fa7-8fee-521dedccb516',
+        product_name: 'AMD Ryzen 9 7950X3D',
+        sku: 'CPU-00096',
+        quantity: 2,
+        unit_price: 2210310,
+        total_price: 4420620,
+        image_url: '/images/cpu/AMD_Ryzen_9_7950X3D_8d5e2f.jpg'
+      },
+      {
+        product_id: '2a62ff5f-486a-4e4a-9cf5-2f49b8e29b9f',
+        product_name: 'EDUP EP-9651',
+        sku: 'WIRELESS-NETWORK-CARD-00838',
+        quantity: 3,
+        unit_price: 134955,
+        total_price: 404865,
+        image_url: '/images/wireless-network-card/EDUP_EP-9651_5081df.jpg'
+      }
+    ],
+    sub_total: 4825485,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 970380,
+    total: 4825485,
+    status: 'delivered',
+    payment_status: 'paid',
+    payment_method: 'airtel_money',
+    payment_reference: 'AM260927.1223.A40CE',
+    paid_at: ISODate('2026-09-27T12:23:46.738Z'),
+    shipping_address: {
+      street: 'Mangarano Nord',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 033334433',
+    created_at: ISODate('2026-09-27T12:23:31.345Z'),
+    updated_at: ISODate('2026-09-27T12:24:22.650Z')
+  },
+  {
+    _id: '9c44ff31-6715-4ea9-85f5-b12094042f79',
+    order_number: 'ORD-20260927-bb87c703',
+    user_id: '52b8c163-15ac-4e80-8536-d67551ad6925',
+    items: [
+      {
+        product_id: '2a62ff5f-486a-4e4a-9cf5-2f49b8e29b9f',
+        product_name: 'EDUP EP-9651',
+        sku: 'WIRELESS-NETWORK-CARD-00838',
+        quantity: 1,
+        unit_price: 134955,
+        total_price: 134955,
+        image_url: '/images/wireless-network-card/EDUP_EP-9651_5081df.jpg'
+      },
+      {
+        product_id: 'cf84139b-f613-4c52-8898-2e5e07c148ba',
+        product_name: 'Ziyituod ZYT-AX210S',
+        sku: 'WIRELESS-NETWORK-CARD-00835',
+        quantity: 1,
+        unit_price: 134550,
+        total_price: 134550,
+        image_url: '/images/wireless-network-card/Ziyituod_ZYT-AX210S_050dec.jpg'
+      },
+      {
+        product_id: '7d1e3620-eb50-4d3f-9436-7abf9499ebb9',
+        product_name: 'Asus PCE-AXE58BT',
+        sku: 'WIRELESS-NETWORK-CARD-00829',
+        quantity: 1,
+        unit_price: 269955,
+        total_price: 269955,
+        image_url: '/images/wireless-network-card/Asus_PCE-AXE58BT_d22064.jpg'
+      },
+      {
+        product_id: '87ecae19-4a4b-4624-be1d-5674a9e884e6',
+        product_name: 'NVIDIA GeForce RTX 4070 Ti',
+        sku: 'GPU-NV-4070TI',
+        quantity: 1,
+        unit_price: 3900000,
+        total_price: 3900000,
+        image_url: 'http://localhost:9000/lami-uploads/products/41bf42e7-74f7-4c25-867c-ac360f48f79b-1789541584.jpg'
+      }
+    ],
+    sub_total: 4439460,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 0,
+    total: 4439460,
+    status: 'delivered',
+    payment_status: 'paid',
+    payment_method: 'mvola',
+    payment_reference: 'MV260927.2116.78B90',
+    paid_at: ISODate('2026-09-27T21:16:39.877Z'),
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0340009999',
+    created_at: ISODate('2026-09-27T21:16:23.115Z'),
+    updated_at: ISODate('2026-09-27T21:21:57.329Z')
+  },
+  {
+    _id: '011088f4-df9e-45ad-8def-9ad9ae86386f',
+    order_number: 'ORD-20261001-de53050e',
+    user_id: '8cbb27c3-c7ec-4bc0-a183-bba2295944c8',
+    items: [
+      {
+        product_id: '6ac9ac2a-601d-4cc0-8add-805f03dff725',
+        product_name: 'Gigabyte GAMING OC',
+        sku: 'VIDEO-CARD-00777',
+        quantity: 1,
+        unit_price: 1169955,
+        total_price: 1169955,
+        image_url: '/images/video-card/Gigabyte_GAMING_OC_83e442.jpg'
+      }
+    ],
+    sub_total: 1169955,
+    shipping_cost: 0,
+    tax: 0,
+    discount: 0,
+    total: 1169955,
+    status: 'delivered',
+    payment_status: 'paid',
+    payment_method: 'orange_money',
+    payment_reference: 'OM261001.1942.19D68',
+    paid_at: ISODate('2026-10-01T19:42:09.302Z'),
+    shipping_address: {
+      street: 'Mangarano',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Haute Matsiatra',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    notes: 'Tel: 0329999999',
+    created_at: ISODate('2026-10-01T19:41:58.185Z'),
+    updated_at: ISODate('2026-10-01T19:44:36.651Z')
+  },
+  {
+    _id: '8f26e899-3682-4f1c-a966-421db55c0b4f',
+    order_number: 'ORD-20261013-239e4a41',
+    user_id: '8cbb27c3-c7ec-4bc0-a183-bba2295944c8',
+    items: [
+      {
+        product_id: '2a62ff5f-486a-4e4a-9cf5-2f49b8e29b9f',
+        product_name: 'EDUP EP-9651',
+        sku: 'WIRELESS-NETWORK-CARD-00838',
+        quantity: 1,
+        unit_price: 121459.5,
+        total_price: 121459.5,
+        image_url: '/images/wireless-network-card/EDUP_EP-9651_5081df.jpg'
+      },
+      {
+        product_id: 'adc513fb-cb26-4d05-ae2a-3f2173e0bdfc',
+        product_name: 'TP-Link TL-WN725N',
+        sku: 'WIRELESS-NETWORK-CARD-00836',
+        quantity: 1,
+        unit_price: 40459.5,
+        total_price: 40459.5,
+        image_url: '/images/wireless-network-card/TP-Link_TL-WN725N_1551de.jpg'
+      }
+    ],
+    sub_total: 161919,
+    shipping_cost: 10000,
+    tax: 0,
+    discount: 17991,
+    total: 171919,
+    status: 'delivered',
+    payment_status: 'pending',
+    payment_method: 'store',
+    shipping_address: {
+      street: 'Retrait en boutique',
+      city: 'Toamasina',
+      postal_code: '501',
+      region: 'Toamasina',
+      province: 'Toamasina',
+      country: 'Madagascar',
+      country_code: 'MG'
+    },
+    created_at: ISODate('2026-10-13T20:33:51.575Z'),
+    updated_at: ISODate('2026-10-13T20:36:07.788Z')
+  }
+]

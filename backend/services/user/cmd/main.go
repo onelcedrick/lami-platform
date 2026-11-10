@@ -14,6 +14,7 @@ import (
 	"github.com/lami-platform/shared/pkg/logger"
 	"github.com/lami-platform/shared/pkg/middleware"
 	"github.com/lami-platform/shared/pkg/mongodb"
+	redisclient "github.com/lami-platform/shared/pkg/redis"
 	"github.com/lami-platform/shared/pkg/storage"
 	"github.com/lami-platform/services/user/internal/application"
 	"github.com/lami-platform/services/user/internal/infrastructure"
@@ -36,10 +37,19 @@ func main() {
 		_ = mongoClient.Disconnect(ctx)
 	}()
 
+	// Connexion Redis (cache)
+	redisConn, err := redisclient.Connect(cfg.RedisURL)
+	if err != nil {
+		logger.Warn().Err(err).Msg("Redis indisponible — cache desactive")
+	}
+	if redisConn != nil {
+		defer redisConn.Close()
+	}
+
 	// Partage la meme collection users que Auth (lami_auth) en production.
 	// En dev, on peut pointer MONGO_DB=lami_auth pour unifier.
 	repo := infrastructure.NewMongoUserRepository(mongoClient)
-	service := application.NewUserService(repo)
+	service := application.NewUserService(repo, redisConn)
 
 	// ✅ Object store pour les avatars (local ou MinIO)
 	store, err := storage.NewFromEnv()

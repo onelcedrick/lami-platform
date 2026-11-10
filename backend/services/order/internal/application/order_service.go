@@ -13,6 +13,7 @@ import (
 	"github.com/lami-platform/shared/pkg/events"
 	"github.com/lami-platform/shared/pkg/pdf"
 	"github.com/lami-platform/services/order/internal/domain"
+	redisclient "github.com/lami-platform/shared/pkg/redis"
 )
 
 type EventPublisher interface {
@@ -29,10 +30,12 @@ type OrderService struct {
 	orderRepo domain.OrderRepository
 	publisher EventPublisher // optional — nil = no events
 	catalog   CatalogPricer  // optional — si nil, refus des commandes (fail-closed)
+	redis         *redisclient.Client
 }
 
-func NewOrderService(orderRepo domain.OrderRepository, publisher EventPublisher, catalog CatalogPricer) *OrderService {
-	return &OrderService{orderRepo: orderRepo, publisher: publisher, catalog: catalog}
+func NewOrderService(orderRepo domain.OrderRepository, publisher EventPublisher, catalog CatalogPricer, redis *redisclient.Client) *OrderService {
+	return &OrderService{
+		redis:         redis,orderRepo: orderRepo, publisher: publisher, catalog: catalog}
 }
 
 func (s *OrderService) itemsToEvents(items []shareddomain.OrderItem) []events.OrderItemEvent {
@@ -88,6 +91,7 @@ func generatePaymentReference(method string) string {
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, userID string, req shareddomain.CreateOrderRequest) (*shareddomain.Order, error) {
+	defer func() { s.invalidateOrderCache(ctx, "", userID) }()
 	if len(req.Items) == 0 {
 		return nil, errors.New("la commande doit contenir au moins un article")
 	}
@@ -215,7 +219,26 @@ func resolvePrice(product *shareddomain.Product, discounts []shareddomain.Discou
 }
 
 func (s *OrderService) GetOrder(ctx context.Context, id string) (*shareddomain.Order, error) {
-	return s.orderRepo.FindByID(ctx, id)
+	// 1. Cache
+	if s.redis != nil {
+		var cached shareddomain.Order
+		if err := s.redis.GetJSON(ctx, cacheOrderPrefix+id, &cached); err == nil {
+			return &cached, nil
+		}
+	}
+
+	// 2. MongoDB
+	order, err := s.orderRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Cache
+	if s.redis != nil && order != nil {
+		_ = s.redis.SetJSON(ctx, cacheOrderPrefix+id, order, orderCacheTTL)
+	}
+
+	return order, nil
 }
 
 func (s *OrderService) GetOrderByNumber(ctx context.Context, orderNumber string) (*shareddomain.Order, error) {
@@ -223,13 +246,33 @@ func (s *OrderService) GetOrderByNumber(ctx context.Context, orderNumber string)
 }
 
 func (s *OrderService) GetUserOrders(ctx context.Context, userID string, page, limit int) ([]shareddomain.Order, int64, error) {
-	if page < 1 {
-		page = 1
+	// 1. Cache (uniquement page 1)
+	cacheKey := cacheUserOrdersPfx + userID + fmt.Sprintf(":p%d:l%d", page, limit)
+	if s.redis != nil && page == 1 {
+		var cached struct {
+			Orders []shareddomain.Order `json:"orders"`
+			Total  int64                `json:"total"`
+		}
+		if err := s.redis.GetJSON(ctx, cacheKey, &cached); err == nil {
+			return cached.Orders, cached.Total, nil
+		}
 	}
-	if limit < 1 || limit > 50 {
-		limit = 20
+
+	// 2. MongoDB (appel original)
+	orders, total, err := s.orderRepo.FindByUserID(ctx, userID, page, limit)
+	if err != nil {
+		return nil, 0, err
 	}
-	return s.orderRepo.FindByUserID(ctx, userID, page, limit)
+
+	// 3. Cache (uniquement page 1)
+	if s.redis != nil && page == 1 {
+		_ = s.redis.SetJSON(ctx, cacheKey, map[string]interface{}{
+			"orders": orders,
+			"total":  total,
+		}, userOrdersTTL)
+	}
+
+	return orders, total, nil
 }
 
 func (s *OrderService) ListOrders(ctx context.Context, page, limit int, status string) ([]shareddomain.Order, int64, error) {
@@ -243,6 +286,7 @@ func (s *OrderService) ListOrders(ctx context.Context, page, limit int, status s
 }
 
 func (s *OrderService) UpdateStatus(ctx context.Context, id string, status shareddomain.OrderStatus, paymentStatus shareddomain.PaymentStatus) (*shareddomain.Order, error) {
+	defer s.invalidateOrderCache(ctx, id, "")
 	order, err := s.orderRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -270,6 +314,24 @@ func (s *OrderService) UpdateStatus(ctx context.Context, id string, status share
 		return nil, fmt.Errorf("transition de statut invalide : %s -> %s", order.Status, status)
 	}
 
+	// ============================================================
+	// VERROUILLAGE METIER
+	// ============================================================
+	// On ne peut pas expedier ou livrer une commande non payee
+	if status == shareddomain.OrderStatusShipped || status == shareddomain.OrderStatusDelivered {
+		// Verifier le payment_status actuel (ou celui qui va etre applique)
+		effectivePaymentStatus := order.PaymentStatus
+		if paymentStatus != "" {
+			effectivePaymentStatus = paymentStatus
+		}
+		if effectivePaymentStatus != shareddomain.PaymentStatusPaid {
+			return nil, fmt.Errorf(
+				"impossible de passer la commande en '%s' sans paiement valide (paiement actuel : %s). Validez d'abord le paiement",
+				status, effectivePaymentStatus,
+			)
+		}
+	}
+
 	if err := s.orderRepo.UpdateStatus(ctx, id, status, paymentStatus); err != nil {
 		return nil, err
 	}
@@ -277,6 +339,10 @@ func (s *OrderService) UpdateStatus(ctx context.Context, id string, status share
 	order.Status = status
 	if paymentStatus != "" {
 		order.PaymentStatus = paymentStatus
+		if paymentStatus == shareddomain.PaymentStatusPaid && order.PaidAt == nil {
+			now := time.Now().UTC()
+			order.PaidAt = &now
+		}
 	}
 	order.UpdatedAt = time.Now().UTC()
 
@@ -307,6 +373,7 @@ func (s *OrderService) UpdateStatus(ctx context.Context, id string, status share
 }
 
 func (s *OrderService) CancelOrder(ctx context.Context, id, userID string) (*shareddomain.Order, error) {
+	defer s.invalidateOrderCache(ctx, id, userID)
 	order, err := s.orderRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -322,6 +389,7 @@ func (s *OrderService) CancelOrder(ctx context.Context, id, userID string) (*sha
 
 // PayOrder - paiement client (mobile money / boutique)
 func (s *OrderService) PayOrder(ctx context.Context, id, userID, method, phone string) (*shareddomain.Order, error) {
+	defer s.invalidateOrderCache(ctx, id, userID)
 	order, err := s.orderRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -390,7 +458,34 @@ func (s *OrderService) PayOrder(ctx context.Context, id, userID, method, phone s
 }
 
 func (s *OrderService) GetStats(ctx context.Context, days int) (*shareddomain.OrderStats, error) {
-	return s.orderRepo.GetStats(ctx, days)
+	if days < 1 {
+		days = 30
+	}
+	if days > 365 {
+		days = 365
+	}
+
+	// 1. Cache
+	cacheKey := cacheStatsPrefix + fmt.Sprintf("%d", days)
+	if s.redis != nil {
+		var cached shareddomain.OrderStats
+		if err := s.redis.GetJSON(ctx, cacheKey, &cached); err == nil {
+			return &cached, nil
+		}
+	}
+
+	// 2. MongoDB
+	stats, err := s.orderRepo.GetStats(ctx, days)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Cache
+	if s.redis != nil && stats != nil {
+		_ = s.redis.SetJSON(ctx, cacheKey, stats, statsCacheTTL)
+	}
+
+	return stats, nil
 }
 
 // ConfirmPayment — webhook operateur Mobile Money (MVola / Orange / Airtel)
@@ -449,8 +544,14 @@ func (s *OrderService) GenerateInvoice(ctx context.Context, orderID string) (*sh
 	if order.InvoiceNumber != "" {
 		return order, nil
 	}
-	if order.PaymentStatus != shareddomain.PaymentStatusPaid {
-		return nil, errors.New("facture disponible uniquement pour commandes payees")
+	// Autoriser la facture si :
+	// - paiement confirme (Mobile Money), OU
+	// - paiement en boutique (le client peut previsualiser avant validation admin)
+	canGenerate := order.PaymentStatus == shareddomain.PaymentStatusPaid ||
+		order.PaymentMethod == "store"
+
+	if !canGenerate {
+		return nil, errors.New("facture disponible uniquement apres paiement")
 	}
 	order.InvoiceNumber = fmt.Sprintf("FAC-%s-%s", time.Now().Format("20060102"), order.OrderNumber[len(order.OrderNumber)-8:])
 	order.UpdatedAt = time.Now().UTC()
@@ -511,4 +612,37 @@ func (s *OrderService) BuildInvoicePDF(ctx context.Context, orderID string) ([]b
 		fmt.Sprintf("%.0f", order.Total),
 	)
 	return data, order.InvoiceNumber + ".pdf", nil
+}
+
+
+// ============================================================
+// CACHE REDIS
+// ============================================================
+const (
+	cacheOrderPrefix    = "cache:order:"
+	cacheUserOrdersPfx  = "cache:orders:user:"
+	cacheStatsPrefix    = "cache:orders:stats:"
+
+	orderCacheTTL  = 5 * time.Minute
+	userOrdersTTL  = 2 * time.Minute
+	statsCacheTTL  = 30 * time.Minute
+)
+
+// invalidateOrderCache supprime les caches lies a une commande.
+func (s *OrderService) invalidateOrderCache(ctx context.Context, orderID, userID string) {
+	if s.redis == nil {
+		return
+	}
+	keys := []string{cacheOrderPrefix + orderID}
+	if userID != "" {
+		keys = append(keys, cacheUserOrdersPfx+userID)
+	}
+	_ = s.redis.Del(ctx, keys...)
+
+	// Invalider aussi les stats
+	raw := s.redis.Raw()
+	keys2, _ := raw.Keys(ctx, cacheStatsPrefix+"*").Result()
+	if len(keys2) > 0 {
+		_ = s.redis.Del(ctx, keys2...)
+	}
 }

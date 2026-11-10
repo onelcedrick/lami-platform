@@ -5,7 +5,7 @@ import (
 	"github.com/lami-platform/shared/pkg/middleware"
 )
 
-func SetupRoutes(app *fiber.App, handler *CatalogHandler, jwtSecret string) {
+func SetupRoutes(app *fiber.App, handler *CatalogHandler, reviewHandler *ReviewHandler, jwtSecret string) {
 	api := app.Group("/api/v1/catalog")
 
 	// ============================================================
@@ -15,6 +15,7 @@ func SetupRoutes(app *fiber.App, handler *CatalogHandler, jwtSecret string) {
 	api.Get("/products", handler.ListProducts)
 	api.Get("/products/popular", handler.ListPopular)
 	api.Get("/products/:id", handler.GetProduct)
+	api.Get("/products/:id/reviews", reviewHandler.ListReviews)
 	api.Get("/products/:id/similar", handler.GetSimilarProducts)
 	api.Get("/products/slug/:slug", handler.GetProductBySlug)
 	api.Get("/categories", handler.ListCategories)
@@ -30,6 +31,7 @@ func SetupRoutes(app *fiber.App, handler *CatalogHandler, jwtSecret string) {
 	}
 
 	// --- Produits (admin) ---
+	api.Post("/products/:id/reviews", middleware.AuthRequired(jwtSecret), reviewHandler.CreateReview)
 	api.Post("/products", adminMiddleware[0], adminMiddleware[1], handler.CreateProduct)
 	api.Post("/products/bulk", adminMiddleware[0], adminMiddleware[1], handler.BulkCreateProducts)
 	api.Put("/products/:id", adminMiddleware[0], adminMiddleware[1], handler.UpdateProduct)

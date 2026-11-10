@@ -120,6 +120,12 @@ func main() {
 	app.All("/api/v1/ia", proxyHandler(iaURL))
 
 	// -------------------------------------------------------------------------
+	// Analytics — SSE stream (PAS de buffer, AVANT le wildcard)
+	// ⚠️ L'ordre est CRITIQUE : doit être déclaré AVANT /api/v1/analytics/*
+	// -------------------------------------------------------------------------
+	app.Get("/api/v1/analytics/stream", streamProxyHandler(analyticsURL))
+
+	// -------------------------------------------------------------------------
 	// Analytics (visiteurs + logs) — proxy transparent
 	// -------------------------------------------------------------------------
 	app.All("/api/v1/analytics/*", proxyHandler(analyticsURL))

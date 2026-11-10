@@ -45,11 +45,18 @@ func main() {
 		logger.Warn().Err(err).Msg("RabbitMQ indisponible — notifications evenements off")
 	} else {
 		defer rmq.Close()
-		_ = rmq.Subscribe(events.QueueNotification, []string{
-			events.RoutingOrderCreated,
-			events.RoutingOrderPaid,
-			events.RoutingOrderCancelled,
-		}, service.HandleOrderEvent)
+		_ = rmq.Subscribe(rabbitmq.SubscribeOptions{
+			Queue: events.QueueNotification,
+			RoutingKeys: []string{
+				events.RoutingOrderCreated,
+				events.RoutingOrderPaid,
+				events.RoutingOrderCancelled,
+			},
+			Prefetch:     10,
+			MaxRetries:   3,
+			RetryBackoff: 1 * time.Second,
+			Handler:      service.HandleOrderEvent,
+		})
 	}
 
 	app := fiber.New(fiber.Config{

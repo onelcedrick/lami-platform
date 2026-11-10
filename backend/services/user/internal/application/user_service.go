@@ -2,8 +2,10 @@ package application
 
 import (
 	"context"
-	"errors"
 	"time"
+
+	redisclient "github.com/lami-platform/shared/pkg/redis"
+	"errors"
 
 	shareddomain "github.com/lami-platform/shared/domain"
 	"github.com/lami-platform/services/user/internal/domain"
@@ -64,11 +66,22 @@ var MadagascarRegions = []shareddomain.GeoRegion{
 }
 
 type UserService struct {
-	repo domain.UserRepository
+	repo  domain.UserRepository
+	redis *redisclient.Client
 }
 
-func NewUserService(repo domain.UserRepository) *UserService {
-	return &UserService{repo: repo}
+// Cache TTL
+const (
+	cartTTL         = 7 * 24 * time.Hour   // 7 jours
+	favoritesTTL    = 30 * 24 * time.Hour  // 30 jours
+	preferencesTTL  = 24 * time.Hour       // 24h
+)
+
+func NewUserService(repo domain.UserRepository, redis *redisclient.Client) *UserService {
+	return &UserService{
+		repo:  repo,
+		redis: redis,
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -323,4 +336,59 @@ func (s *UserService) UpdateShopSettings(ctx context.Context, st *shareddomain.S
 		return nil, err
 	}
 	return st, nil
+}
+
+// ============================================================
+// AJOUT : Panier / Favoris / Preferences avec cache Redis
+// ============================================================
+
+func cartKey(userID string) string      { return "cart:" + userID }
+func favoritesKey(userID string) string { return "favorites:" + userID }
+func prefsKey(userID string) string     { return "prefs:" + userID }
+
+// GetCart - MongoDB + cache Redis
+
+
+// SaveCart - MongoDB + invalidation cache
+
+
+// GetFavorites - MongoDB + cache
+
+
+// SaveFavorites - MongoDB + invalidation
+
+
+// GetPreferences - MongoDB + cache
+func (s *UserService) GetPreferences(ctx context.Context, userID string) (map[string]interface{}, error) {
+	if s.redis != nil {
+		var prefs map[string]interface{}
+		if err := s.redis.GetJSON(ctx, prefsKey(userID), &prefs); err == nil {
+			return prefs, nil
+		}
+	}
+
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	prefs := user.Preferences
+	if prefs == nil {
+		prefs = map[string]interface{}{}
+	}
+
+	if s.redis != nil {
+		_ = s.redis.SetJSON(ctx, prefsKey(userID), prefs, preferencesTTL)
+	}
+	return prefs, nil
+}
+
+// SavePreferences - MongoDB + invalidation
+func (s *UserService) SavePreferences(ctx context.Context, userID string, prefs map[string]interface{}) error {
+	if err := s.repo.UpdatePreferences(ctx, userID, prefs); err != nil {
+		return err
+	}
+	if s.redis != nil {
+		_ = s.redis.SetJSON(ctx, prefsKey(userID), prefs, preferencesTTL)
+	}
+	return nil
 }

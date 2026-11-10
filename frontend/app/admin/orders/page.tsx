@@ -54,6 +54,29 @@ export default function AdminOrdersPage() {
 
   useEffect(() => { load(); }, [statusFilter]);
 
+  const handleValidatePayment = async (orderId: string) => {
+    if (!confirm("Valider le paiement de cette commande ?")) return;
+    setUpdating(true);
+    setMessage("");
+    try {
+      const res = await api.updateOrderStatus(orderId, {
+        status: "confirmed",
+        payment_status: "paid",
+      });
+      if (res.success) {
+        setMessage("Paiement valide");
+        await load();
+        if (selected?.id === orderId && res.data) setSelected(res.data as Order);
+      } else {
+        setMessage(res.error || "Erreur");
+      }
+    } catch {
+      setMessage("Erreur reseau");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleStatusChange = async (orderId: string, status: string) => {
     setUpdating(true);
     setMessage("");
@@ -191,6 +214,25 @@ export default function AdminOrdersPage() {
                   <span>{formatAriary(selected.total)}</span>
                 </div>
               </div>
+              {/* Bouton Valider paiement (si pas paye et pas annule) */}
+              {selected.payment_status !== "paid" &&
+               selected.status !== "cancelled" &&
+               selected.status !== "refunded" && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/40">
+                  <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                    Paiement en attente
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleValidatePayment(selected.id)}
+                    disabled={updating}
+                    className="mt-2 w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {updating ? "Validation..." : "Valider le paiement"}
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="mb-1.5 block text-xs font-medium uppercase text-slate-400 dark:text-slate-500">
                   Changer le statut
@@ -201,10 +243,27 @@ export default function AdminOrdersPage() {
                   onChange={(e) => handleStatusChange(selected.id, e.target.value)}
                   className="input-field"
                 >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{ORDER_STATUS_LABELS[s]}</option>
-                  ))}
+                  {STATUS_OPTIONS.map((s) => {
+                    const isBlocked =
+                      (s === "shipped" || s === "delivered") &&
+                      selected.payment_status !== "paid";
+                    return (
+                      <option
+                        key={s}
+                        value={s}
+                        disabled={isBlocked}
+                      >
+                        {ORDER_STATUS_LABELS[s]}
+                        {isBlocked ? " (paiement requis)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
+                {selected.payment_status !== "paid" && (
+                  <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                    Validez le paiement avant d expedier ou livrer.
+                  </p>
+                )}
               </div>
               {selected.shipping_address && (
                 <div>
