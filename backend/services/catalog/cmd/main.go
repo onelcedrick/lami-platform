@@ -53,6 +53,7 @@ func main() {
 	productRepo := infrastructure.NewMongoProductRepository(mongoClient)
 	categoryRepo := infrastructure.NewMongoCategoryRepository(mongoClient)
 	discountRepo := infrastructure.NewMongoDiscountRepository(mongoClient)
+	reviewRepo := infrastructure.NewMongoReviewRepository(mongoClient)
 	reviewService := application.NewReviewService(reviewRepo, productRepo)
 	catalogService := application.NewCatalogService(productRepo, categoryRepo, discountRepo, redisConn)
 
@@ -64,6 +65,7 @@ func main() {
 	logger.Info().Msg("Object store initialise")
 
 	handler := httpHandler.NewCatalogHandler(catalogService, store)
+	reviewHandler := httpHandler.NewReviewHandler(reviewService)
 
 	// Consumer evenements commande → stock / ventes
 	if rmq, err := rabbitmq.Connect(cfg.RabbitURL); err != nil {

@@ -1,7 +1,7 @@
 """Documents de connaissance initiaux pour le RAG (support technique PC)."""
 
 from app.domain.models import KnowledgeDocument
-from app.rag.vector_store import get_vector_store
+from app.infrastructure.vector_store import get_vector_store
 
 SEED_DOCUMENTS = [
     KnowledgeDocument(

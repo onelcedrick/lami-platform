@@ -7,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.core.config import get_settings
 from app.domain.models import KnowledgeDocument, SourceDocument
-from app.rag.embeddings import EmbeddingService, get_embedding_service
+from app.infrastructure.embeddings import EmbeddingService, get_embedding_service
 
 
 class VectorStore:

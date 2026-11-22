@@ -87,7 +87,7 @@ function CatalogInner() {
           }
         }
         if (discRes.success && discRes.data) setDiscounts(discRes.data as Discount[]);
-      } catch { /* silent */ } finally { setLoading(false); }
+      } catch {  silent  } finally { setLoading(false); }
     }
     load();
   }, [urlCategory, urlMinPrice, urlMaxPrice]);
@@ -174,7 +174,7 @@ function CatalogInner() {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <CatalogToolbar products={allProducts} search={search} onSearch={handleSearchChange} sortBy={sortBy} onSortChange={handleSortChange} viewMode={viewMode} onViewChange={setViewMode} totalCount={products.length} />
+          <CatalogToolbar sortBy={sortBy} onSortChange={handleSortChange} viewMode={viewMode} onViewChange={setViewMode} totalCount={products.length} />
 
           {hasFilters && !loading && (
             <div className="mt-4 flex flex-wrap items-center gap-2">

@@ -94,6 +94,9 @@ export const api = {
 
   getSimilarProducts: (id: string, limit = 4) =>
     request(`/api/v1/catalog/products/${id}/similar?limit=${limit}`),
+  getProductReviews: (id: string) => request(`/api/v1/catalog/products/${id}/reviews`),
+  addProductReview: (id: string, body: { rating: number; comment: string; user_name: string }) =>
+    request(`/api/v1/catalog/products/${id}/reviews`, { method: "POST", body: JSON.stringify(body) }),
 
   getProductBySlug: (slug: string) =>
     request(`/api/v1/catalog/products/slug/${encodeURIComponent(slug)}`),

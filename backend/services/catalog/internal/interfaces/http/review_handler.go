@@ -21,12 +21,17 @@ func (h *ReviewHandler) ListReviews(c *fiber.Ctx) error {
 	if err != nil {
 		return response.InternalError(c, "Impossible de récupérer les avis")
 	}
-	return response.OK(c, reviews)
+	return response.Success(c, fiber.StatusOK, "Avis récupérés avec succès", reviews)
 }
 
 func (h *ReviewHandler) CreateReview(c *fiber.Ctx) error {
 	productID := c.Params("id")
-	userID := c.Locals("userID").(string)
+	
+	// Récupération de l'ID utilisateur depuis le middleware d'authentification
+	userID, ok := c.Locals("userID").(string)
+	if !ok {
+		return response.Unauthorized(c, "Utilisateur non authentifié")
+	}
 	
 	var body struct {
 		Rating   int    `json:"rating"`
@@ -35,7 +40,7 @@ func (h *ReviewHandler) CreateReview(c *fiber.Ctx) error {
 	}
 	
 	if err := c.BodyParser(&body); err != nil {
-		return response.BadRequest(c, "Données invalides")
+		return response.ValidationError(c, "Données invalides")
 	}
 
 	review := &domain.Review{
@@ -47,8 +52,8 @@ func (h *ReviewHandler) CreateReview(c *fiber.Ctx) error {
 	}
 
 	if err := h.service.AddReview(c.Context(), review); err != nil {
-		return response.BadRequest(c, err.Error())
+		return response.Error(c, fiber.StatusBadRequest, err.Error())
 	}
 
-	return response.Created(c, review)
+	return response.Success(c, fiber.StatusCreated, "Avis créé avec succès", review)
 }

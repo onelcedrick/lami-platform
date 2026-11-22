@@ -195,6 +195,12 @@ export default function ChatWidget() {
     setLoading(true);
 
     try {
+      // ✅ On prépare l'historique local pour l'envoyer au backend
+      const historyPayload = messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .slice(-5) // Garde les 5 derniers messages (max)
+        .map(m => ({ role: m.role, content: m.content }));
+
       const res = await fetch(`${API_BASE}/api/v1/ia/chat`, {
         method: "POST",
         headers: buildHeaders(),
@@ -202,7 +208,8 @@ export default function ChatWidget() {
           message: text,
           conversation_id: conversationId,
           mode: "auto",
-          context: forcedContext,  // ✅ Contexte produit transmis au backend
+          context: forcedContext,
+          recent_history: historyPayload, // ✅ Envoi de l'historique
         }),
       });
 

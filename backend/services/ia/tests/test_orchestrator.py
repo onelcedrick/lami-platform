@@ -6,7 +6,7 @@ from pathlib import Path
 # Ajouter le package app au path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.agent.orchestrator import AgentOrchestrator, SUPPORT_KEYWORDS, COMMERCE_KEYWORDS
+from app.application.orchestrator import AgentOrchestrator, SUPPORT_KEYWORDS, COMMERCE_KEYWORDS
 
 
 def test_detect_mode_support():

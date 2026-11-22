@@ -2,8 +2,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 
-from app.agent.orchestrator import get_orchestrator
-from app.agent.tools import get_tool_registry
+from app.application.orchestrator import get_orchestrator
+from app.infrastructure.tools import get_tool_registry
 from app.core.config import get_settings
 from app.core.security import CurrentUser, get_current_user, require_user
 from app.domain.models import (
@@ -19,10 +19,10 @@ from app.domain.models import (
     SearchRequest,
     SourceDocument,
 )
-from app.rag.pipeline import get_rag_pipeline
-from app.rag.vector_store import get_vector_store
-from app.services.chat_history import get_chat_history
-from app.services.seed import seed_knowledge_base
+from app.infrastructure.rag import get_rag_pipeline
+from app.infrastructure.vector_store import get_vector_store
+from app.application.chat_history import get_chat_history
+from app.infrastructure.seed import seed_knowledge_base
 
 router = APIRouter()
 
@@ -74,6 +74,12 @@ async def chat(
         content=body.message,
     )
 
+    # ✅ Récupération des 4 derniers messages pour le contexte
+    msgs = await history.get_messages(conv.id)
+    history_text = "\n".join([f"{m.role.value}: {m.content}" for m in msgs[-4:]])
+    print(f"[DEBUG ROUTES] History ({len(history_text)} chars):\n{history_text}", flush=True)
+    print(f"[DEBUG ROUTES] Historique envoyé à l'IA :\n{history_text}", flush=True)
+
     # Appel orchestrateur
     orchestrator = get_orchestrator()
     response = await orchestrator.handle(
@@ -82,6 +88,8 @@ async def chat(
         conversation_id=conv.id,
         auth_token=token,
         user_id=user.user_id if user else None,
+        context=body.context,
+        history=history_text,  # ✅ On passe le contexte
     )
 
     # ✅ Calcul du nombre d'articles ajoutés au panier
@@ -103,6 +111,9 @@ async def chat(
         latency_ms=response.latency_ms,
     )
 
+    # Propager cart_added calcule si l'orchestrateur ne l'a pas deja
+    if getattr(response, "cart_added", 0) == 0 and cart_added:
+        response.cart_added = cart_added
     return response
 
 
@@ -139,7 +150,7 @@ async def rag_search(body: SearchRequest):
     rag = await get_rag_pipeline()
     return await rag.retrieve(
         query=body.query,
-        top_k=body.top_k,
+        top_k=body.limit,
         category=body.category,
     )
 

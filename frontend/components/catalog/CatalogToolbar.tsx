@@ -1,7 +1,5 @@
 "use client";
 
-import SmartSearch from "@/components/search/SmartSearch";
-import type { SearchableProduct } from "@/lib/search";
 
 export type SortKey =
   | "relevance"
@@ -12,9 +10,6 @@ export type SortKey =
 export type ViewMode = "grid" | "list";
 
 interface CatalogToolbarProps {
-  products: SearchableProduct[];
-  search: string;
-  onSearch: (q: string) => void;
   sortBy: SortKey;
   onSortChange: (v: SortKey) => void;
   viewMode: ViewMode;
@@ -31,9 +26,6 @@ const SORT_OPTIONS: { value: SortKey; label: string; icon: string }[] = [
 ];
 
 export default function CatalogToolbar({
-  products,
-  search,
-  onSearch,
   sortBy,
   onSortChange,
   viewMode,
@@ -44,14 +36,7 @@ export default function CatalogToolbar({
     <div className="flex flex-col gap-3">
       {/* Ligne 1 : Recherche + Tri + Vue */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="flex-1">
-          <SmartSearch
-            products={products}
-            navigateOnSubmit={false}
-            onSearch={onSearch}
-            placeholder="Rechercher (ryzen, samsung, rtx...)"
-          />
-        </div>
+        
 
         {/* Tri */}
         <div className="flex items-center gap-2">
@@ -119,7 +104,7 @@ export default function CatalogToolbar({
             {totalCount}
           </strong>{" "}
           produit{totalCount > 1 ? "s" : ""}
-          {search ? ` pour « ${search} »` : ""}
+
         </span>
       </div>
     </div>

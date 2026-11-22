@@ -212,7 +212,7 @@ export default function SmartSearch({
               <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                 Produits
               </p>
-              {previewResults.map((p) => (
+              {previewResults.map((p: any) => (
                 <button
                   key={p.id}
                   type="button"
@@ -222,19 +222,33 @@ export default function SmartSearch({
                     setOpen(false);
                     if (onSelectProduct) onSelectProduct(p.id);
                     if (navigateOnSubmit) {
-                      router.push(`/catalog?search=${encodeURIComponent(p.name)}`);
+                      router.push(`/product/${p.slug || p.id}`);
                     }
                   }}
-                  className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 transition"
                 >
-                  <span className="truncate">
+                  {/* ✅ Ajout de l'image du produit */}
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
+                    {p.images?.[0] || p.image ? (
+                      <img
+                        src={p.images?.[0] || p.image}
+                        alt={p.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[10px] text-slate-400">N/A</div>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-1 flex-col truncate">
                     <span className="font-medium">{p.name}</span>
                     {p.brand && (
-                      <span className="ml-2 text-xs text-slate-400">{p.brand}</span>
+                      <span className="text-xs text-slate-400">{p.brand}</span>
                     )}
-                  </span>
+                  </div>
+                  
                   {typeof p.price === "number" && (
-                    <span className="ml-2 shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400">
+                    <span className="ml-2 shrink-0 text-xs font-bold text-primary-600 dark:text-primary-400">
                       {formatAriary(p.price)}
                     </span>
                   )}

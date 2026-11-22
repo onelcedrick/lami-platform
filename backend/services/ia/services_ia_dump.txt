@@ -1,0 +1,2467 @@
+==========================================
+FILE: .env (secrets masqués)
+==========================================
+APP_NAME=L'AMI IA Service
+APP_ENV=development
+HTTP_PORT=8090
+
+MONGO_URI=***MASKED***
+MONGO_DB=lami_ia
+REDIS_ADDR=localhost:6379
+JWT_SECRET=***MASKED***
+
+GATEWAY_URL=http://localhost:8000
+CATALOG_SERVICE_URL=http://localhost:8083
+ORDER_SERVICE_URL=http://localhost:8084
+TICKET_SERVICE_URL=http://localhost:8085
+
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+RAG_TOP_K=5
+RAG_SIMILARITY_THRESHOLD=0.35
+MAX_CONTEXT_CHARS=4000
+
+LLM_PROVIDER=openai_compatible
+OPENAI_API_KEY=***MASKED***
+OPENAI_BASE_URL=https://api.groq.com/openai/v1
+OPENAI_MODEL=llama-3.3-70b-versatile
+
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1
+
+
+==========================================
+FILE: app/application/chat_history.py
+==========================================
+"""
+Service de gestion de l'historique des conversations IA.
+
+Persiste chaque échange dans MongoDB (lami_ia) pour :
+- Retrouver ses conversations passées
+- Analyser les usages (M2 Data Science)
+- Respecter le RGPD (TTL 30 jours)
+"""
+
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+from uuid import uuid4
+
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+
+from app.core.config import get_settings
+from app.domain.models import (
+    Conversation,
+    ConversationDetail,
+    ConversationMessage,
+    ConversationSummary,
+    MessageRole,
+    SourceDocument,
+    ToolCallResult,
+)
+
+
+CONVERSATION_TTL_DAYS = 30
+
+
+class ChatHistoryService:
+    """CRUD conversations + messages."""
+
+    def __init__(self, db: AsyncIOMotorDatabase) -> None:
+        self.conversations = db["conversations"]
+        self.messages = db["messages"]
+
+    async def ensure_indexes(self) -> None:
+        # Index utilisateur + session
+        await self.conversations.create_index("user_id")
+        await self.conversations.create_index("session_id")
+        await self.conversations.create_index("last_message_at")
+        # Index messages
+        await self.messages.create_index("conversation_id")
+        await self.messages.create_index("created_at")
+        # TTL 30 jours
+        await self.conversations.create_index(
+            "expires_at",
+            expireAfterSeconds=0,
+        )
+
+    # ------------------------------------------------------------
+    # Création
+    # ------------------------------------------------------------
+    async def create_conversation(
+        self,
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        mode: str = "auto",
+    ) -> Conversation:
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id=str(uuid4()),
+            user_id=user_id,
+            session_id=session_id,
+            title="Nouvelle conversation",
+            mode=mode,
+            message_count=0,
+            last_message_at=now,
+            created_at=now,
+            expires_at=now + timedelta(days=CONVERSATION_TTL_DAYS),
+        )
+        await self.conversations.insert_one(conv.model_dump())
+        return conv
+
+    async def get_or_create(
+        self,
+        conversation_id: Optional[str],
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        mode: str = "auto",
+    ) -> Conversation:
+        if conversation_id:
+            existing = await self.get_conversation(conversation_id)
+            if existing:
+                return existing
+        return await self.create_conversation(
+            user_id=user_id, session_id=session_id, mode=mode
+        )
+
+    # ------------------------------------------------------------
+    # Lecture
+    # ------------------------------------------------------------
+    async def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
+        doc = await self.conversations.find_one({"_id": conversation_id})
+        if not doc:
+            return None
+        doc["id"] = doc.pop("_id")
+        return Conversation(**doc)
+
+    async def list_conversations(
+        self,
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[ConversationSummary]:
+        query: dict = {}
+        if user_id:
+            query["user_id"] = user_id
+        elif session_id:
+            query["session_id"] = session_id
+        else:
+            return []
+
+        cursor = (
+            self.conversations.find(query)
+            .sort("last_message_at", -1)
+            .limit(limit)
+        )
+        docs = await cursor.to_list(length=limit)
+        return [
+            ConversationSummary(
+                id=str(d.get("id") or d["_id"]),
+                title=d.get("title") or "Sans titre",
+                mode=d.get("mode") or "auto",
+                message_count=int(d.get("message_count") or 0),
+                last_message_at=d.get("last_message_at") or d.get("created_at"),
+                created_at=d.get("created_at") or d.get("last_message_at"),
+            )
+            for d in docs
+        ]
+
+    async def get_messages(self, conversation_id: str) -> list[ConversationMessage]:
+        cursor = self.messages.find(
+            {"conversation_id": conversation_id}
+        ).sort("created_at", 1)
+        docs = await cursor.to_list(length=500)
+        return [
+            ConversationMessage(
+                id=d["_id"],
+                role=d["role"],
+                content=d["content"],
+                mode=d.get("mode"),
+                sources=[SourceDocument(**s) for s in d.get("sources", [])],
+                tool_calls=[ToolCallResult(**t) for t in d.get("tool_calls", [])],
+                cart_added=d.get("cart_added", 0),
+                latency_ms=d.get("latency_ms", 0),
+                created_at=d["created_at"],
+            )
+            for d in docs
+        ]
+
+    async def get_detail(self, conversation_id: str) -> Optional[ConversationDetail]:
+        conv = await self.get_conversation(conversation_id)
+        if not conv:
+            return None
+        messages = await self.get_messages(conversation_id)
+        return ConversationDetail(
+            id=conv.id,
+            title=conv.title,
+            mode=conv.mode,
+            messages=messages,
+            created_at=conv.created_at,
+            last_message_at=conv.last_message_at,
+        )
+
+    # ------------------------------------------------------------
+    # Écriture
+    # ------------------------------------------------------------
+    async def add_message(
+        self,
+        conversation_id: str,
+        role: MessageRole,
+        content: str,
+        mode: Optional[str] = None,
+        sources: Optional[list[SourceDocument]] = None,
+        tool_calls: Optional[list[ToolCallResult]] = None,
+        cart_added: int = 0,
+        latency_ms: int = 0,
+    ) -> ConversationMessage:
+        now = datetime.now(timezone.utc)
+        msg = ConversationMessage(
+            id=str(uuid4()),
+            role=role,
+            content=content,
+            mode=mode,
+            sources=sources or [],
+            tool_calls=tool_calls or [],
+            cart_added=cart_added,
+            latency_ms=latency_ms,
+            created_at=now,
+        )
+        # Insertion du message
+        msg_doc = msg.model_dump()
+        msg_doc["_id"] = msg_doc.pop("id")
+        msg_doc["conversation_id"] = conversation_id
+        await self.messages.insert_one(msg_doc)
+
+        # Mise à jour de la conversation
+        update: dict = {
+            "$inc": {"message_count": 1},
+            "$set": {
+                "last_message_at": now,
+                "expires_at": now + timedelta(days=CONVERSATION_TTL_DAYS),
+            },
+        }
+        # Auto-titre au premier message utilisateur
+        if role == MessageRole.USER:
+            conv = await self.get_conversation(conversation_id)
+            if conv and conv.title == "Nouvelle conversation":
+                title = content.strip().split("\n")[0][:60]
+                if len(content) > 60:
+                    title += "…"
+                update["$set"]["title"] = title
+
+        await self.conversations.update_one({"_id": conversation_id}, update)
+        return msg
+
+    async def rename_conversation(self, conversation_id: str, title: str) -> bool:
+        res = await self.conversations.update_one(
+            {"_id": conversation_id},
+            {"$set": {"title": title[:100]}},
+        )
+        return res.modified_count > 0
+
+    # ------------------------------------------------------------
+    # Suppression
+    # ------------------------------------------------------------
+    async def delete_conversation(self, conversation_id: str) -> bool:
+        await self.messages.delete_many({"conversation_id": conversation_id})
+        res = await self.conversations.delete_one({"_id": conversation_id})
+        return res.deleted_count > 0
+
+    # ------------------------------------------------------------
+    # Analytics (pour ton rapport M2)
+    # ------------------------------------------------------------
+    async def get_stats(self) -> dict:
+        total_conv = await self.conversations.count_documents({})
+        total_msg = await self.messages.count_documents({})
+        # Répartition par mode
+        pipeline_mode = [
+            {"$group": {"_id": "$mode", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+        ]
+        modes = await self.conversations.aggregate(pipeline_mode).to_list(20)
+        # Latence moyenne
+        pipeline_lat = [
+            {"$match": {"latency_ms": {"$gt": 0}}},
+            {
+                "$group": {
+                    "_id": None,
+                    "avg": {"$avg": "$latency_ms"},
+                    "max": {"$max": "$latency_ms"},
+                }
+            },
+        ]
+        lat = await self.messages.aggregate(pipeline_lat).to_list(1)
+        return {
+            "total_conversations": total_conv,
+            "total_messages": total_msg,
+            "modes": {m["_id"] or "unknown": m["count"] for m in modes},
+            "avg_latency_ms": round(lat[0]["avg"], 1) if lat else 0,
+            "max_latency_ms": round(lat[0]["max"], 1) if lat else 0,
+        }
+
+
+# Singleton
+_history_service: Optional[ChatHistoryService] = None
+_mongo_client: Optional[AsyncIOMotorClient] = None
+
+
+async def get_chat_history() -> ChatHistoryService:
+    global _history_service, _mongo_client
+    if _history_service is None:
+        settings = get_settings()
+        _mongo_client = AsyncIOMotorClient(settings.mongo_uri)
+        db = _mongo_client[settings.mongo_db]
+        _history_service = ChatHistoryService(db)
+        await _history_service.ensure_indexes()
+    return _history_service
+
+==========================================
+FILE: app/application/__init__.py
+==========================================
+
+
+==========================================
+FILE: app/application/orchestrator.py
+==========================================
+"""
+Orchestrateur IA — Architecture NLU (Natural Language Understanding).
+1. Le LLM reformule la demande en JSON (Intention).
+2. Le Système (Python) traite la demande selon l'intention.
+3. Le LLM reformule la réponse finale.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from typing import Any, Optional
+from uuid import uuid4
+
+from app.core.config import get_settings
+from app.domain.models import ChatContext, ChatResponse, SourceDocument, ToolCallResult, ProductCard
+from app.infrastructure.llm import get_llm_client
+from app.infrastructure.rag import get_rag_pipeline
+from app.infrastructure.tools import get_tool_registry
+
+SYSTEM_NLU_PROMPT = """Tu es un analyseur de requêtes (NLU) pour L'AMI, une boutique informatique.
+Ton rôle est de transformer la demande du client en un objet JSON STRICT.
+Tu ne dois PAS répondre au client, tu dois juste sortir du JSON.
+
+Intentions possibles :
+- "ticket" : Le client veut parler à un humain, ouvrir un ticket, ou contacter le SAV.
+- "diagnostic" : Le client a un problème technique (panne, écran bleu, surchauffe, etc.).
+- "produit" : Le client cherche un produit précis (ex: "je cherche une RTX 3060").
+- "configuration" : Le client veut un PC complet selon un budget (ex: "je veux un PC pour 2 millions").
+- "salutation" : Le client dit bonjour, merci, ou discute de manière générale.
+
+Format de sortie STRICT (aucun autre texte) :
+{
+  "intent": "ticket|diagnostic|produit|configuration|salutation",
+  "query": "Le texte de recherche ou le problème reformulé",
+  "budget": 2000000 (uniquement si intent=configuration, sinon null),
+  "usage": "gaming|bureautique" (uniquement si intent=configuration, sinon null)
+}
+"""
+
+SYSTEM_NLG_PROMPT = """Tu es l'assistant commercial et technique de L'AMI à Madagascar.
+Le système vient de traiter la demande du client et t'a fourni les résultats bruts.
+Ta mission est de reformuler ces résultats en une réponse claire, polie et professionnelle en français.
+
+RÈGLES STRICTES DE FILTRAGE :
+1. Lis attentivement la question du client.
+2. Ne garde QUE les informations des documents qui répondent directement à cette question.
+3. Si le client parle d'un écran bleu, ignore les informations sur la politique de retour ou le GPU.
+4. Sois concis. Ne recopie pas les documents mot pour mot. Fais des phrases.
+"""
+
+class AgentOrchestrator:
+    def __init__(self) -> None:
+        self.settings = get_settings()
+        self.llm = get_llm_client()
+        self.tools = get_tool_registry()
+
+    async def handle(
+        self,
+        message: str,
+        mode: str = "auto",
+        conversation_id: Optional[str] = None,
+        auth_token: Optional[str] = None,
+        user_id: Optional[str] = None,
+        context: Optional[ChatContext] = None,
+        history: Optional[str] = None,
+    ) -> ChatResponse:
+        t0 = time.perf_counter()
+        conv_id = conversation_id or str(uuid4())
+
+        # =========================================================
+        # 1. NLU : Le LLM reformule la demande en JSON
+        # =========================================================
+        nlu_prompt = f"Historique récent :\n{history or 'Aucun'}\n\nNouvelle demande : {message}"
+        
+        nlu_response = await self.llm.generate(prompt=nlu_prompt, system=SYSTEM_NLU_PROMPT)
+        raw_content = nlu_response.get("content", "{}")
+        
+        # Nettoyage du JSON (au cas où le LLM ajoute des backticks)
+        raw_content = raw_content.replace("```json", "").replace("```", "").strip()
+        
+        try:
+            parsed = json.loads(raw_content)
+            intent = parsed.get("intent", "salutation")
+            query = parsed.get("query", message)
+        except Exception as e:
+            print(f"[NLU ERROR] Impossible de parser le JSON : {raw_content}")
+            intent = "salutation"
+            query = message
+
+        print(f"[ROUTING] Intention détectée : {intent} | Requête : {query}")
+
+        # =========================================================
+        # 2. SYSTEME : Traitement selon l'intention
+        # =========================================================
+        sources: list[SourceDocument] = []
+        tool_results: list[ToolCallResult] = []
+        products: list[ProductCard] = []
+        raw_system_result = ""
+
+        # --- A. TICKET ---
+        if intent == "ticket":
+            if not auth_token:
+                raw_system_result = "Erreur: L'utilisateur n'est pas connecté. Il doit se connecter pour créer un ticket."
+            else:
+                desc = f"Problème : {query}\nContexte : {history or 'Aucun'}"
+                tc = await self.tools.execute(
+                    "create_support_ticket",
+                    {"title": "Demande de support", "description": desc, "priority": "medium"},
+                    auth_token=auth_token, user_id=user_id
+                )
+                tool_results.append(tc)
+                if isinstance(tc.result, dict) and tc.result.get("error"):
+                    raw_system_result = f"Erreur de création du ticket : {tc.result['error']}"
+                else:
+                    tid = tc.result.get("ticket", {}).get("id", "N/A")
+                    raw_system_result = f"Le ticket a été créé avec succès. Numéro : {tid}."
+
+        # --- B. DIAGNOSTIC (RAG) ---
+        elif intent == "diagnostic":
+            rag = await get_rag_pipeline()
+            sources = await rag.retrieve(query)
+            if sources:
+                context_str = "\n".join([f"- {s.title} : {s.content[:300]}" for s in sources])
+                raw_system_result = f"Voici les documents techniques trouvés :\n{context_str}"
+            else:
+                raw_system_result = (
+                    "Aucun document spécifique trouvé. Procédure générale : "
+                    "1. Noter le code d'arrêt. 2. Démarrer en mode sans échec. "
+                    "3. Tester la RAM. 4. Mettre à jour les pilotes."
+                )
+
+        # --- C. CONFIGURATION PC ---
+        elif intent == "configuration":
+            budget = parsed.get("budget") or 1000000
+            usage = parsed.get("usage") or "gaming"
+            tc = await self.tools.execute("suggest_pc_build", {"usage": usage, "budget": budget}, auth_token=auth_token)
+            tool_results.append(tc)
+            if isinstance(tc.result, dict) and tc.result.get("build"):
+                raw_system_result = f"Configuration {usage} proposée : {json.dumps(tc.result['build'], ensure_ascii=False)}. Total : {tc.result.get('total')} Ar."
+            else:
+                raw_system_result = "Impossible de générer une configuration pour ce budget."
+
+        # --- D. PRODUIT ---
+        elif intent == "produit":
+            tc = await self.tools.execute("search_products", {"search": query, "limit": 3}, auth_token=auth_token)
+            tool_results.append(tc)
+            products = self.tools.extract_products(tool_results)
+            if products:
+                raw_system_result = f"Produits trouvés : {json.dumps([p.model_dump() for p in products], ensure_ascii=False)}"
+            else:
+                raw_system_result = "Aucun produit trouvé dans le catalogue."
+
+        # --- E. SALUTATION / GENERAL ---
+        else:
+            raw_system_result = "L'utilisateur te salue ou fait une discussion générale. Réponds poliment et demande comment tu peux l'aider."
+
+        # =========================================================
+        # 3. NLG : Le LLM reformule la réponse finale
+        # =========================================================
+        nlg_prompt = (
+            f"Question du client : {message}\n\n"
+            f"Documents et résultats récupérés :\n{raw_system_result}\n\n"
+            "Rédige une réponse ciblée en gardant uniquement ce qui concerne la question du client."
+        )
+        final_response = await self.llm.generate(prompt=nlg_prompt, system=SYSTEM_NLG_PROMPT)
+        final_reply = final_response.get("content", "")
+
+        # ✅ FALLBACK : Si le LLM a échoué, on formate les données brutes proprement
+        if "service de langage est momentanément indisponible" in final_reply or not final_reply:
+            print("[FALLBACK] Le LLM a échoué, utilisation de la réponse système brute.")
+            
+            if intent == "produit" and products:
+                # On formate nous-mêmes la liste des produits
+                lines = ["Voici les produits trouvés :"]
+                for p in products:
+                    lines.append(f"- **{p.name}** : {float(p.price):,.0f} Ar".replace(",", " "))
+                final_reply = "\n".join(lines)
+                
+            elif intent == "configuration":
+                final_reply = f"Voici une configuration {parsed.get('usage')} pour un budget de {parsed.get('budget', 0):,.0f} Ar. Dites 'oui' si elle vous convient.".replace(",", " ")
+                
+            elif intent == "diagnostic" and sources:
+                final_reply = f"Concernant votre problème, voici ce que j'ai trouvé :\n\n{sources[0].content[:500]}..."
+                
+            else:
+                final_reply = raw_system_result
+
+        cart_added = sum(int(tc.result.get("count") or 0) for tc in tool_results if tc.name == "add_to_cart" and isinstance(tc.result, dict))
+        latency = int((time.perf_counter() - t0) * 1000)
+
+        return ChatResponse(
+            conversation_id=conv_id,
+            reply=final_reply,
+            mode=intent,
+            sources=sources,
+            tool_calls=tool_results,
+            products=products,
+            cart_added=cart_added,
+            latency_ms=latency,
+        )
+
+_orchestrator: Optional[AgentOrchestrator] = None
+
+def get_orchestrator() -> AgentOrchestrator:
+    global _orchestrator
+    if _orchestrator is None:
+        _orchestrator = AgentOrchestrator()
+    return _orchestrator
+
+
+==========================================
+FILE: app/application/session_store.py
+==========================================
+"""Memoire conversationnelle courte (EF-05) — pending_build, last_reject, etc."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from app.domain.ports import SessionPort
+
+
+class InMemorySessionStore(SessionPort):
+    def __init__(self) -> None:
+        self._sessions: dict[str, dict[str, Any]] = {}
+
+    def get(self, conversation_id: str) -> dict[str, Any]:
+        if conversation_id not in self._sessions:
+            self._sessions[conversation_id] = {}
+        return self._sessions[conversation_id]
+
+    def set(self, conversation_id: str, data: dict[str, Any]) -> None:
+        self._sessions[conversation_id] = data
+
+    def update(self, conversation_id: str, **kwargs: Any) -> dict[str, Any]:
+        s = self.get(conversation_id)
+        s.update(kwargs)
+        return s
+
+    def clear_key(self, conversation_id: str, key: str) -> None:
+        s = self.get(conversation_id)
+        s.pop(key, None)
+
+
+_store: InMemorySessionStore | None = None
+
+
+def get_session_store() -> InMemorySessionStore:
+    global _store
+    if _store is None:
+        _store = InMemorySessionStore()
+    return _store
+
+
+==========================================
+FILE: app/core/config.py
+==========================================
+"""Configuration centralisee (12-factor)."""
+
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    app_name: str = "L'AMI IA Service"
+    environment: str = "development"
+    http_port: int = 8007
+
+    # LLM
+    llm_provider: str = "groq"  # groq | openai | openai_compatible | mock
+    groq_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    groq_model: str = "openai/gpt-oss-120b"
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-4o-mini"
+    llm_timeout_s: float = 20.0
+    llm_max_tokens: int = 1024
+
+    # Embeddings
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embeddings_backend: str = ""  # hash | sentence-transformers | auto
+
+    # Mongo
+    mongo_uri: str = "mongodb://mongo:27017"
+    mongo_db: str = "lami_ia"
+
+    # Microservices internes
+    catalog_url: str = "http://catalog-service:8083"
+    ticket_url: str = "http://ticket-service:8085"
+    order_url: str = "http://order-service:8084"
+    gateway_url: str = "http://gateway:8000"
+
+    # Auth
+    jwt_secret: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+
+    # RAG
+    rag_top_k: int = 3
+    rag_min_score: float = 0.25
+
+    # Perf
+    target_latency_ms: int = 2500
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+==========================================
+FILE: app/core/__init__.py
+==========================================
+
+
+==========================================
+FILE: app/core/security.py
+==========================================
+from typing import Optional
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+
+from app.core.config import get_settings
+
+security = HTTPBearer(auto_error=False)
+
+
+class CurrentUser:
+    def __init__(self, user_id: str, email: str, role: str):
+        self.user_id = user_id
+        self.email = email
+        self.role = role
+
+
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> Optional[CurrentUser]:
+    if credentials is None:
+        return None
+
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.jwt_secret,
+            algorithms=["HS256"],
+        )
+        user_id = payload.get("user_id") or payload.get("sub")
+        email = payload.get("email", "")
+        role = payload.get("role", "client")
+        if not user_id:
+            return None
+        return CurrentUser(user_id=user_id, email=email, role=role)
+    except JWTError:
+        return None
+
+
+async def require_user(
+    user: Optional[CurrentUser] = Depends(get_current_user),
+) -> CurrentUser:
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentification requise",
+        )
+    return user
+
+
+==========================================
+FILE: app/domain/__init__.py
+==========================================
+
+
+==========================================
+FILE: app/domain/models.py
+==========================================
+"""Entites et DTO du domaine IA (Pydantic)."""
+
+from datetime import datetime
+from enum import Enum
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field
+
+
+class MessageRole(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+    TOOL = "tool"
+
+
+class IntentMode(str, Enum):
+    AUTO = "auto"
+    SUPPORT = "support"
+    COMMERCE = "commerce"
+    GENERAL = "general"
+
+
+class ChatMessage(BaseModel):
+    role: MessageRole
+    content: str
+    tool_call_id: Optional[str] = None
+    name: Optional[str] = None
+
+
+class ProductContext(BaseModel):
+    id: str
+    name: str
+    brand: Optional[str] = None
+    price: Optional[float] = None
+    category: Optional[str] = None
+    attributes: Optional[dict[str, Any]] = None
+
+class ChatContext(BaseModel):
+    """Contexte envoye par le frontend (EF-04)."""
+    intent: str = "general"
+    product: Optional[ProductContext] = None
+
+
+class HistoryMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+    conversation_id: Optional[str] = None
+    mode: str = Field(default="auto", description="auto | support | commerce | general")
+    context: Optional[ChatContext] = None
+    recent_history: Optional[list[HistoryMessage]] = None  # ✅ Nouveau champ
+
+
+class SourceDocument(BaseModel):
+    id: str
+    title: str
+    content: str
+    score: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolCallResult(BaseModel):
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    result: Any = None
+
+
+class ProductCard(BaseModel):
+    id: str
+    name: str
+    brand: str = ""
+    price: float = 0
+    stock: int = 0
+    image: Optional[str] = None
+    slug: Optional[str] = None
+    rating: Optional[float] = None
+
+
+class ChatResponse(BaseModel):
+    conversation_id: str
+    reply: str
+    mode: str
+    sources: list[SourceDocument] = Field(default_factory=list)
+    tool_calls: list[ToolCallResult] = Field(default_factory=list)
+    products: list[ProductCard] = Field(default_factory=list)
+    cart_added: int = 0
+    latency_ms: int = 0
+
+
+class KnowledgeDocument(BaseModel):
+    id: Optional[str] = None
+    title: str
+    content: str
+    category: str = "general"
+    tags: list[str] = Field(default_factory=list)
+    source: str = "manual"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[datetime] = None
+
+
+class IngestRequest(BaseModel):
+    documents: list[KnowledgeDocument]
+
+
+class IngestResponse(BaseModel):
+    ingested: int
+    ids: list[str]
+
+
+class HealthResponse(BaseModel):
+    service: str = "ia"
+    status: str = "healthy"
+    llm_provider: str = ""
+    embedding_model: str = ""
+    documents_count: int = 0
+
+
+# ============================================================
+# Historique de chat
+# ============================================================
+
+class ConversationMessage(BaseModel):
+    id: str
+    role: MessageRole
+    content: str
+    mode: Optional[str] = None
+    sources: list[SourceDocument] = Field(default_factory=list)
+    tool_calls: list[ToolCallResult] = Field(default_factory=list)
+    cart_added: int = 0
+    latency_ms: int = 0
+    created_at: datetime
+
+
+class Conversation(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    title: str = "Nouvelle conversation"
+    mode: str = "auto"
+    message_count: int = 0
+    last_message_at: datetime
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+
+
+class ConversationSummary(BaseModel):
+    id: str
+    title: str
+    mode: str
+    message_count: int
+    last_message_at: datetime
+    created_at: datetime
+
+
+class ConversationDetail(BaseModel):
+    id: str
+    title: str
+    mode: str
+    messages: list[ConversationMessage]
+    created_at: datetime
+    last_message_at: datetime
+
+
+class RenameConversationRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=100)
+
+
+class SearchRequest(BaseModel):
+    query: str
+    limit: int = 5
+    category: Optional[str] = None
+
+
+==========================================
+FILE: app/domain/ports.py
+==========================================
+"""Ports (interfaces) — Clean Architecture / Hexagonal.
+
+La logique metier ne depend que de ces abstractions,
+pas de FastAPI, Groq ou MongoDB.
+"""
+
+from abc import ABC, abstractmethod
+from typing import Any, Optional
+
+from app.domain.models import (
+    ChatMessage,
+    ProductCard,
+    SourceDocument,
+    ToolCallResult,
+)
+
+
+class LLMPort(ABC):
+    @abstractmethod
+    async def generate(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.4,
+    ) -> str:
+        ...
+
+    @property
+    @abstractmethod
+    def provider_name(self) -> str:
+        ...
+
+
+class EmbeddingPort(ABC):
+    @abstractmethod
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        ...
+
+    @property
+    @abstractmethod
+    def dimension(self) -> int:
+        ...
+
+    @property
+    @abstractmethod
+    def backend(self) -> str:
+        ...
+
+
+class VectorStorePort(ABC):
+    @abstractmethod
+    async def upsert(self, docs: list[dict[str, Any]]) -> list[str]:
+        ...
+
+    @abstractmethod
+    async def search(
+        self,
+        query_vector: list[float],
+        top_k: int = 3,
+        category: Optional[str] = None,
+    ) -> list[SourceDocument]:
+        ...
+
+    @abstractmethod
+    async def count(self) -> int:
+        ...
+
+
+class ToolPort(ABC):
+    @abstractmethod
+    def list_schemas(self) -> list[dict[str, Any]]:
+        ...
+
+    @abstractmethod
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        auth_token: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> ToolCallResult:
+        ...
+
+    @abstractmethod
+    def extract_products(self, tool_results: list[ToolCallResult]) -> list[ProductCard]:
+        ...
+
+
+class SessionPort(ABC):
+    """Memoire conversationnelle courte (pending_build, etc.)."""
+
+    @abstractmethod
+    def get(self, conversation_id: str) -> dict[str, Any]:
+        ...
+
+    @abstractmethod
+    def set(self, conversation_id: str, data: dict[str, Any]) -> None:
+        ...
+
+    @abstractmethod
+    def update(self, conversation_id: str, **kwargs: Any) -> dict[str, Any]:
+        ...
+
+    @abstractmethod
+    def clear_key(self, conversation_id: str, key: str) -> None:
+        ...
+
+
+class ChatHistoryPort(ABC):
+    @abstractmethod
+    async def get_or_create(
+        self,
+        conversation_id: Optional[str],
+        user_id: Optional[str],
+        session_id: Optional[str],
+        mode: str,
+    ) -> Any:
+        ...
+
+    @abstractmethod
+    async def add_message(
+        self,
+        conversation_id: str,
+        role: str,
+        content: str,
+        **meta: Any,
+    ) -> None:
+        ...
+
+
+==========================================
+FILE: app/infrastructure/embeddings.py
+==========================================
+from functools import lru_cache
+from typing import List
+import os
+import threading
+
+import numpy as np
+
+from app.core.config import get_settings
+
+
+class EmbeddingService:
+    """Service d'embeddings avec fallback robuste.
+
+    Priorités :
+    1. Si EMBEDDINGS_BACKEND=hash → force le mode hash (rapide, dev)
+    2. Sinon essaye sentence-transformers avec un timeout
+    3. Si timeout ou erreur → bascule sur hash automatiquement
+    """
+
+    def __init__(self) -> None:
+        self.settings = get_settings()
+        self._model = None
+        self._dim = 384
+        self._backend = "hash"
+
+    def load(self) -> None:
+        # ---------- Mode forcé par variable d'environnement ----------
+        force = (os.getenv("EMBEDDINGS_BACKEND") or "").lower()
+        if force in ("hash", "hashing", "simple"):
+            self._set_hash()
+            print("[embeddings] backend=hash (force par EMBEDDINGS_BACKEND)", flush=True)
+            return
+
+        # ---------- Tentative sentence-transformers avec TIMEOUT ----------
+        timeout = float(os.getenv("EMBEDDINGS_LOAD_TIMEOUT", "20"))
+
+        def _try_load(store: dict) -> None:
+            try:
+                from sentence_transformers import SentenceTransformer
+
+                store["model"] = SentenceTransformer(self.settings.embedding_model)
+                store["ok"] = True
+            except Exception as e:
+                store["error"] = str(e)
+                store["ok"] = False
+
+        result: dict = {"ok": False}
+        thread = threading.Thread(target=_try_load, args=(result,), daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+
+        if thread.is_alive():
+            print(
+                f"[embeddings] TIMEOUT apres {timeout}s — fallback hash",
+                flush=True,
+            )
+            self._set_hash()
+            return
+
+        if result.get("ok") and result.get("model") is not None:
+            self._model = result["model"]
+            self._dim = self._model.get_sentence_embedding_dimension()
+            self._backend = "sentence-transformers"
+            print(
+                f"[embeddings] backend=sentence-transformers dim={self._dim}",
+                flush=True,
+            )
+        else:
+            print(
+                f"[embeddings] erreur chargement ({result.get('error')}) — fallback hash",
+                flush=True,
+            )
+            self._set_hash()
+
+    def _set_hash(self) -> None:
+        self._model = None
+        self._backend = "hash"
+        self._dim = 384
+
+    @property
+    def dimension(self) -> int:
+        return self._dim
+
+    @property
+    def backend(self) -> str:
+        return self._backend
+
+    def embed(self, texts: List[str]) -> np.ndarray:
+        if not texts:
+            return np.zeros((0, self._dim), dtype=np.float32)
+
+        if self._model is not None:
+            vectors = self._model.encode(
+                texts,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
+            return vectors.astype(np.float32)
+
+        return np.vstack([self._hash_embed(t) for t in texts])
+
+    def embed_one(self, text: str) -> np.ndarray:
+        return self.embed([text])[0]
+
+    def _hash_embed(self, text: str) -> np.ndarray:
+        """Embedding déterministe simple (offline / fallback)."""
+        vec = np.zeros(self._dim, dtype=np.float32)
+        tokens = text.lower().split()
+        if not tokens:
+            return vec
+        for i, tok in enumerate(tokens):
+            h = hash(tok) % self._dim
+            vec[h] += 1.0 + (i % 7) * 0.01
+        norm = np.linalg.norm(vec)
+        if norm > 0:
+            vec /= norm
+        return vec
+
+
+@lru_cache
+def get_embedding_service() -> EmbeddingService:
+    svc = EmbeddingService()
+    svc.load()
+    return svc
+
+==========================================
+FILE: app/infrastructure/__init__.py
+==========================================
+
+
+==========================================
+FILE: app/infrastructure/llm.py
+==========================================
+"""Client LLM (Groq) simplifié pour l'orchestrateur NLU."""
+
+from __future__ import annotations
+import logging
+from typing import Optional, Any
+
+import httpx
+
+from app.core.config import get_settings
+from app.domain.ports import LLMPort
+
+logger = logging.getLogger("ia.llm")
+
+class LLMClient(LLMPort):
+    def __init__(self) -> None:
+        self.settings = get_settings()
+
+    @property
+    def provider_name(self) -> str:
+        return "groq"
+
+    async def generate(self, prompt: str, system: str = "") -> dict:
+        """Retourne TOUJOURS un dictionnaire avec la clé 'content'."""
+        key = self.settings.groq_api_key
+        if not key:
+            return {"content": "Erreur: Clé API manquante."}
+            
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                res = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}"},
+                    json={
+                        "model": self.settings.groq_model,
+                        "messages": messages,
+                        "temperature": 0.3,
+                    }
+                )
+                res.raise_for_status()
+                data = res.json()
+                msg = data["choices"][0]["message"]
+                # On renvoie TOUJOURS un dictionnaire
+                return {"content": msg.get("content", "")}
+                
+        except Exception as e:
+            logger.error(f"Erreur LLM: {e}")
+            return {"content": "Désolé, le service de langage est momentanément indisponible."}
+
+_llm: Optional[LLMClient] = None
+
+def get_llm_client() -> LLMClient:
+    global _llm
+    if _llm is None:
+        _llm = LLMClient()
+    return _llm
+
+
+==========================================
+FILE: app/infrastructure/rag.py
+==========================================
+"""Pipeline RAG : retrieve + build context + support prompt (EF-02)."""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from app.core.config import get_settings
+from app.domain.models import SourceDocument
+from app.infrastructure.vector_store import get_vector_store
+
+
+class RAGPipeline:
+    def __init__(self) -> None:
+        self.settings = get_settings()
+
+    async def retrieve(
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        category: Optional[str] = None,
+    ) -> list[SourceDocument]:
+        store = await get_vector_store()
+        k = top_k or self.settings.rag_top_k
+        docs = await store.search(
+            query,
+            top_k=k,
+            category=category,
+            threshold=self.settings.rag_min_score,
+        )
+        return docs
+
+    def build_context(self, sources: list[SourceDocument]) -> str:
+        if not sources:
+            return ""
+        parts = []
+        for i, s in enumerate(sources, 1):
+            parts.append(f"[{i}] {s.title}\n{s.content[:800]}")
+        return "\n\n".join(parts)
+
+    def build_support_prompt(self, question: str, context: str) -> str:
+        if not context:
+            return (
+                f"Question client : {question}\n\n"
+                "Aucun document pertinent trouve dans la base. "
+                "Demande des precisions ou propose un ticket support."
+            )
+        return (
+            "Contexte technique L'AMI (utilise uniquement ces informations) :\n"
+            f"{context}\n\n"
+            f"Question client : {question}\n\n"
+            "Reponds en francais, de facon concise et actionnable."
+        )
+
+
+_rag: Optional[RAGPipeline] = None
+
+
+async def get_rag_pipeline() -> RAGPipeline:
+    global _rag
+    if _rag is None:
+        _rag = RAGPipeline()
+    return _rag
+
+
+==========================================
+FILE: app/infrastructure/seed.py
+==========================================
+"""Documents de connaissance initiaux pour le RAG (support technique PC)."""
+
+from app.domain.models import KnowledgeDocument
+from app.infrastructure.vector_store import get_vector_store
+
+SEED_DOCUMENTS = [
+    KnowledgeDocument(
+        title="Ecran bleu (BSOD) - Diagnostic de base",
+        content=(
+            "Un ecran bleu Windows (BSOD) indique une erreur systeme critique. "
+            "Etapes de diagnostic : 1) Noter le code d'arret (ex: MEMORY_MANAGEMENT, "
+            "IRQL_NOT_LESS_OR_EQUAL, DRIVER_IRQL). 2) Demarrer en mode sans echec. "
+            "3) Mettre a jour les pilotes GPU et chipset. 4) Tester la RAM avec "
+            "Windows Memory Diagnostic. 5) Verifier la temperature CPU/GPU. "
+            "6) Desinstaller les derniers logiciels ou mises a jour. "
+            "Si le BSOD survient au jeu uniquement, le GPU ou son alimentation "
+            "est souvent en cause."
+        ),
+        category="diagnostic",
+        tags=["bsod", "ecran bleu", "windows", "crash"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="PC ne demarre pas - Checklist alimentation",
+        content=(
+            "Si le PC ne s'allume pas : 1) Verifier que la prise et l'interrupteur "
+            "du bloc d'alimentation (PSU) sont en position ON. 2) Tester avec un "
+            "autre cable secteur. 3) Debrancher GPU, disques et peripherals, "
+            "tester en configuration minimale (CPU + 1 barrette RAM). "
+            "4) Verifier les connecteurs 24-pin carte mere et 8-pin CPU. "
+            "5) Un PSU sous-dimensionne ou defaillant est une cause frequente. "
+            "Puissance recommandee : RTX 4070 ~650W, RTX 4080 ~750W, "
+            "RTX 4090 ~850W 80+ Gold."
+        ),
+        category="diagnostic",
+        tags=["demarrage", "alimentation", "psu", "power"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="Pas de signal ecran - GPU et affichage",
+        content=(
+            "Pas d'image au demarrage : 1) Verifier le cable video (DisplayPort/HDMI) "
+            "branche sur la carte graphique et non sur la carte mere si un GPU dedie "
+            "est present. 2) Reseater le GPU dans son slot PCIe. 3) Tester avec un "
+            "seul stick de RAM. 4) Clear CMOS (jumper ou retirer pile 5 min). "
+            "5) Si iGPU disponible, tester la sortie carte mere. "
+            "6) Bruit de bip au POST : consulter le manuel carte mere pour le code."
+        ),
+        category="diagnostic",
+        tags=["affichage", "gpu", "signal", "ecran"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="Surchauffe CPU - Solutions",
+        content=(
+            "Temperatures CPU elevees (>90C en charge) : 1) Verifier que le "
+            "ventirad/AIO est correctement monte et que la protection plastique "
+            "a ete retiree. 2) Reappliquer de la pate thermique. "
+            "3) Controler le flux d'air du boitier (intake avant, exhaust arriere/haut). "
+            "4) Dans le BIOS : activer un profil de ventilateur plus agressif. "
+            "5) Undervolt ou limiter le boost si necessaire. "
+            "Temperatures cibles idle : 30-45C, charge : 70-85C selon le modele."
+        ),
+        category="refroidissement",
+        tags=["surchauffe", "cpu", "temperature", "ventirad"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="Compatibilite RAM DDR4 vs DDR5",
+        content=(
+            "DDR4 et DDR5 ne sont pas interchangeables. "
+            "La generation depend du socket et de la carte mere. "
+            "AM5 (Ryzen 7000/9000) : DDR5 uniquement. "
+            "AM4 (Ryzen 3000/5000) : DDR4. "
+            "Intel LGA1700 : DDR4 ou DDR5 selon le modele de carte mere. "
+            "Pour le gaming, 32 Go (2x16) en dual channel est recommande. "
+            "Frequences typiques : DDR4-3200 a 3600, DDR5-5600 a 6000."
+        ),
+        category="compatibilite",
+        tags=["ram", "ddr4", "ddr5", "compatibilite"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="Installation Windows et drivers essentiels",
+        content=(
+            "Apres assemblage : 1) Creer une cle USB bootable avec Media Creation Tool. "
+            "2) Installer Windows 11. 3) Installer les drivers chipset du fabricant "
+            "de la carte mere en premier. 4) Drivers GPU (GeForce Experience ou "
+            "AMD Adrenalin). 5) Drivers reseau et audio. "
+            "6) Activer XMP/EXPO pour la RAM dans le BIOS. "
+            "Ne jamais installer de 'driver packs' tiers non officiels."
+        ),
+        category="installation",
+        tags=["windows", "drivers", "installation"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="Choix alimentation selon GPU",
+        content=(
+            "Recommandations PSU 80+ Bronze minimum, Gold recommande. "
+            "RTX 4060 / RX 7600 : 550W. "
+            "RTX 4070 / RX 7800 XT : 650W. "
+            "RTX 4070 Ti / RTX 4080 : 750W. "
+            "RTX 4090 : 850-1000W. "
+            "Prevoir une marge de 20-30% au-dessus de la conso estimee. "
+            "Privilegiez les marques : Corsair, Seasonic, be quiet!, Super Flower."
+        ),
+        category="compatibilite",
+        tags=["alimentation", "psu", "gpu", "wattage"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="Reset BIOS / Clear CMOS",
+        content=(
+            "Pour reinitialiser le BIOS : 1) Eteindre et debrancher l'alimentation. "
+            "2) Localiser le jumper CLEAR_CMOS sur la carte mere (manuel). "
+            "3) Court-circuiter 10 secondes, ou retirer la pile CR2032 pendant 5 minutes. "
+            "4) Remettre et redemarrer. "
+            "Utile apres un bad overclock, un ecran noir post-BIOS update, "
+            "ou un oubli de mot de passe BIOS."
+        ),
+        category="bios",
+        tags=["bios", "cmos", "reset"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="SSD NVMe non detecte",
+        content=(
+            "SSD M.2 non visible : 1) Verifier le slot M.2 utilise "
+            "(certains partagent la bande passante avec un port SATA). "
+            "2) Dans le BIOS, activer le controleur NVMe / changer le mode "
+            "SATA de IDE vers AHCI. 3) Reseater le SSD. "
+            "4) Si Windows ne le voit pas pour installation : charger les "
+            "drivers RAID/NVMe du constructeur pendant le setup. "
+            "5) Mettre a jour le BIOS de la carte mere."
+        ),
+        category="stockage",
+        tags=["ssd", "nvme", "m.2", "detection"],
+        source="manual",
+    ),
+    KnowledgeDocument(
+        title="Politique de retour et garantie L'AMI",
+        content=(
+            "Retour sous 14 jours si produit non descellé et dans son emballage d'origine. "
+            "Garantie constructeur : 2 ans pieces standard, 3 ans sur certaines marques "
+            "(Samsung SSD, Corsair). "
+            "Pour un SAV : creer un ticket avec numero de commande, photos, "
+            "et description du defaut. "
+            "Les dommages lies a un montage incorrect ou un overclock extreme "
+            "peuvent exclure la garantie."
+        ),
+        category="sav",
+        tags=["garantie", "retour", "sav"],
+        source="manual",
+    ),
+]
+
+
+async def seed_knowledge_base() -> int:
+    store = await get_vector_store()
+    existing = await store.count()
+    if existing >= len(SEED_DOCUMENTS):
+        return 0
+    ids = await store.ingest(SEED_DOCUMENTS)
+    return len(ids)
+
+
+==========================================
+FILE: app/infrastructure/tools.py
+==========================================
+"""
+Registre d'outils (Function Calling) — appels HTTP vers microservices Go.
+Pattern Registry + Adapter.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Callable, Optional
+from uuid import uuid4
+
+import httpx
+
+from app.core.config import get_settings
+from app.domain.models import ProductCard, ToolCallResult
+from app.domain.ports import ToolPort
+
+
+class ToolDefinition:
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        parameters: dict[str, Any],
+        handler: Callable,
+    ):
+        self.name = name
+        self.description = description
+        self.parameters = parameters
+        self.handler = handler
+
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
+
+
+class ToolRegistry(ToolPort):
+    def __init__(self) -> None:
+        self.settings = get_settings()
+        self._tools: dict[str, ToolDefinition] = {}
+        self._register_defaults()
+
+    def register(self, tool: ToolDefinition) -> None:
+        self._tools[tool.name] = tool
+
+    def list_schemas(self) -> list[dict[str, Any]]:
+        return [t.schema() for t in self._tools.values()]
+
+    def _register_defaults(self) -> None:
+        self.register(
+            ToolDefinition(
+                name="search_products",
+                description=(
+                    "Recherche des produits dans le catalogue L'AMI "
+                    "(CPU, GPU, RAM, PC, etc.). Filtre optionnel par budget Ariary."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "search": {"type": "string", "description": "Texte de recherche"},
+                        "category": {"type": "string", "description": "Categorie optionnelle"},
+                        "max_price": {"type": "number", "description": "Budget max en Ariary"},
+                        "limit": {"type": "integer", "description": "Nombre max (defaut 5)"},
+                    },
+                },
+                handler=self._search_products,
+            )
+        )
+        self.register(
+            ToolDefinition(
+                name="get_product",
+                description="Detail d'un produit par ID ou slug.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "string"},
+                        "slug": {"type": "string"},
+                    },
+                },
+                handler=self._get_product,
+            )
+        )
+        self.register(
+            ToolDefinition(
+                name="suggest_pc_build",
+                description=(
+                    "Propose une configuration PC compatible selon usage et budget en Ariary."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "usage": {
+                            "type": "string",
+                            "description": "gaming | bureautique | creation | streaming",
+                        },
+                        "budget": {
+                            "type": "number",
+                            "description": "Budget maximum en Ariary (MGA)",
+                        },
+                    },
+                    "required": ["usage", "budget"],
+                },
+                handler=self._suggest_pc_build,
+            )
+        )
+        self.register(
+            ToolDefinition(
+                name="create_support_ticket",
+                description="Cree un ticket support technique pour l'utilisateur authentifie.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "description": {"type": "string"},
+                        "priority": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high", "urgent"],
+                        },
+                    },
+                    "required": ["title", "description"],
+                },
+                handler=self._create_support_ticket,
+            )
+        )
+        self.register(
+            ToolDefinition(
+                name="list_categories",
+                description="Liste les categories du catalogue L'AMI.",
+                parameters={"type": "object", "properties": {}},
+                handler=self._list_categories,
+            )
+        )
+        self.register(
+            ToolDefinition(
+                name="add_to_cart",
+                description=(
+                    "Ajoute des produits au panier (apres confirmation utilisateur). "
+                    "Retourne cart_items pour le frontend."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "product_id": {"type": "string"},
+                                    "name": {"type": "string"},
+                                    "price": {"type": "number"},
+                                    "quantity": {"type": "integer"},
+                                    "image": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                    "required": ["items"],
+                },
+                handler=self._add_to_cart,
+            )
+        )
+
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        auth_token: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> ToolCallResult:
+        tool = self._tools.get(name)
+        if not tool:
+            return ToolCallResult(
+                name=name,
+                arguments=arguments,
+                result={"error": f"Outil inconnu: {name}"},
+            )
+        try:
+            result = await tool.handler(
+                arguments,
+                auth_token=auth_token,
+                user_id=user_id,
+            )
+            return ToolCallResult(name=name, arguments=arguments, result=result)
+        except Exception as exc:
+            return ToolCallResult(
+                name=name,
+                arguments=arguments,
+                result={"error": str(exc)},
+            )
+
+    def extract_products(self, tool_results: list[ToolCallResult]) -> list[ProductCard]:
+        cards: list[ProductCard] = []
+        seen: set[str] = set()
+        for tc in tool_results:
+            data = tc.result
+            if not isinstance(data, dict) or data.get("error"):
+                continue
+            items = data.get("products") or data.get("items") or []
+            if isinstance(data.get("product"), dict):
+                items = [data["product"]]
+            if data.get("build") and isinstance(data["build"], list):
+                items = data["build"]
+            for p in items:
+                if not isinstance(p, dict):
+                    continue
+                pid = str(p.get("id") or p.get("product_id") or "")
+                if not pid or pid in seen:
+                    continue
+                seen.add(pid)
+                cards.append(
+                    ProductCard(
+                        id=pid,
+                        name=str(p.get("name") or ""),
+                        brand=str(p.get("brand") or ""),
+                        price=float(p.get("price") or 0),
+                        stock=int(p.get("stock") or 0),
+                        image=p.get("image") or (p.get("images") or [None])[0],
+                        slug=p.get("slug"),
+                        rating=p.get("rating"),
+                    )
+                )
+        return cards
+
+    # ---- HTTP helpers ----
+
+    def _headers(self, auth_token: Optional[str] = None) -> dict[str, str]:
+        h = {"Content-Type": "application/json", "Accept": "application/json"}
+        if auth_token:
+            h["Authorization"] = f"Bearer {auth_token}"
+        return h
+
+    async def _get_json(self, url: str, params: Optional[dict] = None, auth_token: Optional[str] = None) -> Any:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            res = await client.get(url, params=params or {}, headers=self._headers(auth_token))
+            if res.status_code >= 400:
+                return {"error": f"HTTP {res.status_code}", "detail": res.text[:300]}
+            return res.json()
+
+    async def _post_json(self, url: str, body: dict, auth_token: Optional[str] = None) -> Any:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.post(url, json=body, headers=self._headers(auth_token))
+            if res.status_code >= 400:
+                return {"error": f"HTTP {res.status_code}", "detail": res.text[:300]}
+            return res.json()
+
+    def _unwrap(self, payload: Any) -> Any:
+        if isinstance(payload, dict) and "data" in payload:
+            return payload["data"]
+        return payload
+
+    # ---- Handlers ----
+
+    async def _search_products(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
+        params: dict[str, Any] = {"limit": int(args.get("limit") or 5)}
+        if args.get("search"):
+            params["search"] = args["search"]
+        if args.get("category"):
+            params["category"] = args["category"]
+        if args.get("max_price") is not None:
+            params["max_price"] = args["max_price"]
+        raw = await self._get_json(
+            f"{self.settings.catalog_url}/api/v1/catalog/products",
+            params=params,
+            auth_token=auth_token,
+        )
+        data = self._unwrap(raw)
+        products = data if isinstance(data, list) else (data.get("items") if isinstance(data, dict) else [])
+        # Filtre budget local de securite
+        max_p = args.get("max_price")
+        if max_p is not None and products:
+            products = [p for p in products if float(p.get("price") or 0) <= float(max_p)]
+        return {"products": products or [], "count": len(products or [])}
+
+    async def _get_product(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
+        pid = args.get("product_id")
+        slug = args.get("slug")
+        if pid:
+            raw = await self._get_json(
+                f"{self.settings.catalog_url}/api/v1/catalog/products/{pid}",
+                auth_token=auth_token,
+            )
+        elif slug:
+            raw = await self._get_json(
+                f"{self.settings.catalog_url}/api/v1/catalog/products/slug/{slug}",
+                auth_token=auth_token,
+            )
+        else:
+            return {"error": "product_id ou slug requis"}
+        data = self._unwrap(raw)
+        return {"product": data}
+
+    async def _suggest_pc_build(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
+        usage = str(args.get("usage") or "bureautique").lower()
+        budget = float(args.get("budget") or 0)
+        if budget <= 0:
+            return {"error": "budget invalide"}
+        # Categories cibles selon usage
+        targets = {
+            "gaming": ["CPU", "GPU", "RAM", "Stockage", "Alimentation", "Boitier"],
+            "bureautique": ["CPU", "RAM", "Stockage", "Alimentation"],
+            "creation": ["CPU", "GPU", "RAM", "Stockage", "Alimentation"],
+            "streaming": ["CPU", "GPU", "RAM", "Stockage", "Alimentation"],
+        }
+        cats = targets.get(usage, targets["bureautique"])
+        # Allocation budget simple
+        weights = {
+            "CPU": 0.25, "GPU": 0.35, "RAM": 0.12, "Stockage": 0.12,
+            "Alimentation": 0.10, "Boitier": 0.06,
+        }
+        build = []
+        total = 0.0
+        for cat in cats:
+            share = weights.get(cat, 0.1)
+            max_price = budget * share * 1.15
+            raw = await self._get_json(
+                f"{self.settings.catalog_url}/api/v1/catalog/products",
+                params={"category": cat, "max_price": max_price, "limit": 3, "sort_by": "price"},
+                auth_token=auth_token,
+            )
+            data = self._unwrap(raw)
+            products = data if isinstance(data, list) else (data.get("items") if isinstance(data, dict) else [])
+            if not products:
+                # fallback search by name
+                raw2 = await self._get_json(
+                    f"{self.settings.catalog_url}/api/v1/catalog/products",
+                    params={"search": cat, "limit": 3},
+                    auth_token=auth_token,
+                )
+                data2 = self._unwrap(raw2)
+                products = data2 if isinstance(data2, list) else (data2.get("items") if isinstance(data2, dict) else [])
+            if products:
+                # prend le meilleur sous budget restant
+                remaining = budget - total
+                candidates = [p for p in products if float(p.get("price") or 0) <= remaining]
+                pick = candidates[-1] if candidates else None
+                if pick is None and products and float(products[0].get("price") or 0) <= remaining:
+                    pick = products[0]
+                if pick:
+                    build.append(pick)
+                    total += float(pick.get("price") or 0)
+        return {
+            "usage": usage,
+            "budget": budget,
+            "total": total,
+            "within_budget": total <= budget,
+            "build": build,
+            "count": len(build),
+        }
+
+    async def _create_support_ticket(
+        self, args: dict, auth_token: Optional[str] = None, user_id: Optional[str] = None, **_
+    ) -> dict:
+        if not auth_token:
+            return {"error": "Authentification requise pour creer un ticket"}
+        body = {
+            "title": args.get("title") or "Demande support",
+            "description": args.get("description") or "",
+            "priority": args.get("priority") or "medium",
+            "category": "technical",
+        }
+        raw = await self._post_json(
+            f"{self.settings.ticket_url}/api/v1/tickets",
+            body=body,
+            auth_token=auth_token,
+        )
+        data = self._unwrap(raw)
+        return {"ticket": data}
+
+    async def _list_categories(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
+        raw = await self._get_json(
+            f"{self.settings.catalog_url}/api/v1/catalog/categories",
+            auth_token=auth_token,
+        )
+        data = self._unwrap(raw)
+        return {"categories": data if isinstance(data, list) else []}
+
+    async def _add_to_cart(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
+        items = args.get("items") or []
+        if not items:
+            return {"error": "Aucun article", "count": 0, "items": []}
+        # Le panier est gere cote frontend (Zustand) + sync user service.
+        # On renvoie les items normalises pour cart_added.
+        normalized = []
+        for it in items:
+            normalized.append({
+                "product_id": str(it.get("product_id") or it.get("id") or ""),
+                "name": str(it.get("name") or ""),
+                "price": float(it.get("price") or 0),
+                "quantity": int(it.get("quantity") or 1),
+                "image": it.get("image") or "",
+            })
+        return {"items": normalized, "count": len(normalized), "ok": True}
+
+
+_registry: Optional[ToolRegistry] = None
+
+
+def get_tool_registry() -> ToolRegistry:
+    global _registry
+    if _registry is None:
+        _registry = ToolRegistry()
+    return _registry
+
+
+==========================================
+FILE: app/infrastructure/vector_store.py
+==========================================
+from datetime import datetime, timezone
+from typing import Any, Optional
+from uuid import uuid4
+
+import numpy as np
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+
+from app.core.config import get_settings
+from app.domain.models import KnowledgeDocument, SourceDocument
+from app.infrastructure.embeddings import EmbeddingService, get_embedding_service
+
+
+class VectorStore:
+    """Stockage documents + vecteurs dans MongoDB.
+    Similarite cosine en memoire (suffisant pour volumes demo / Master).
+    Pour production : MongoDB Atlas Vector Search.
+    """
+
+    def __init__(
+        self,
+        db: AsyncIOMotorDatabase,
+        embeddings: EmbeddingService,
+    ) -> None:
+        self.collection = db["knowledge_documents"]
+        self.embeddings = embeddings
+        self._cache: list[dict[str, Any]] = []
+        self._cache_loaded = False
+
+    async def ensure_indexes(self) -> None:
+        await self.collection.create_index("category")
+        await self.collection.create_index("tags")
+        await self.collection.create_index("title")
+
+    async def _load_cache(self) -> None:
+        if self._cache_loaded:
+            return
+        cursor = self.collection.find({})
+        docs = await cursor.to_list(length=10000)
+        self._cache = docs
+        self._cache_loaded = True
+
+    def invalidate_cache(self) -> None:
+        self._cache_loaded = False
+        self._cache = []
+
+    async def count(self) -> int:
+        return await self.collection.count_documents({})
+
+    async def ingest(self, documents: list[KnowledgeDocument]) -> list[str]:
+        if not documents:
+            return []
+
+        texts = [f"{d.title}\n{d.content}" for d in documents]
+        vectors = self.embeddings.embed(texts)
+
+        ids: list[str] = []
+        now = datetime.now(timezone.utc)
+        ops = []
+        for doc, vec in zip(documents, vectors):
+            doc_id = doc.id or str(uuid4())
+            ids.append(doc_id)
+            ops.append(
+                {
+                    "_id": doc_id,
+                    "title": doc.title,
+                    "content": doc.content,
+                    "category": doc.category,
+                    "tags": doc.tags,
+                    "source": doc.source,
+                    "metadata": doc.metadata,
+                    "embedding": vec.tolist(),
+                    "created_at": doc.created_at or now,
+                    "updated_at": now,
+                }
+            )
+
+        if ops:
+            await self.collection.insert_many(ops)
+            self.invalidate_cache()
+        return ids
+
+    async def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        category: Optional[str] = None,
+        threshold: float = 0.0,
+    ) -> list[SourceDocument]:
+        await self._load_cache()
+        if not self._cache:
+            return []
+
+        query_vec = self.embeddings.embed_one(query)
+        results: list[tuple[float, dict]] = []
+
+        for doc in self._cache:
+            if category and doc.get("category") != category:
+                continue
+            emb = doc.get("embedding")
+            if not emb:
+                continue
+            doc_vec = np.array(emb, dtype=np.float32)
+            score = float(np.dot(query_vec, doc_vec))
+            if score >= threshold:
+                results.append((score, doc))
+
+        results.sort(key=lambda x: x[0], reverse=True)
+        top = results[:top_k]
+
+        return [
+            SourceDocument(
+                id=str(doc["_id"]),
+                title=doc.get("title", ""),
+                content=doc.get("content", ""),
+                score=round(score, 4),
+                metadata={
+                    "category": doc.get("category"),
+                    "tags": doc.get("tags", []),
+                    "source": doc.get("source"),
+                },
+            )
+            for score, doc in top
+        ]
+
+    async def delete(self, doc_id: str) -> bool:
+        res = await self.collection.delete_one({"_id": doc_id})
+        self.invalidate_cache()
+        return res.deleted_count > 0
+
+    async def list_documents(self, limit: int = 50) -> list[dict]:
+        cursor = self.collection.find(
+            {},
+            {"embedding": 0},
+        ).limit(limit)
+        docs = await cursor.to_list(length=limit)
+        for d in docs:
+            d["id"] = str(d.pop("_id"))
+        return docs
+
+
+_vector_store: Optional[VectorStore] = None
+_mongo_client: Optional[AsyncIOMotorClient] = None
+
+
+async def get_vector_store() -> VectorStore:
+    global _vector_store, _mongo_client
+    if _vector_store is None:
+        settings = get_settings()
+        _mongo_client = AsyncIOMotorClient(settings.mongo_uri)
+        db = _mongo_client[settings.mongo_db]
+        _vector_store = VectorStore(db, get_embedding_service())
+        await _vector_store.ensure_indexes()
+    return _vector_store
+
+
+async def close_vector_store() -> None:
+    global _vector_store, _mongo_client
+    if _mongo_client:
+        _mongo_client.close()
+    _vector_store = None
+    _mongo_client = None
+
+
+==========================================
+FILE: app/__init__.py
+==========================================
+"""Service IA L'AMI — Assistant conversationnel (LLM + RAG + Function Calling)."""
+__version__ = "2.0.0"
+
+
+==========================================
+FILE: app/interfaces/__init__.py
+==========================================
+
+
+==========================================
+FILE: app/interfaces/routes.py
+==========================================
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+
+from app.application.orchestrator import get_orchestrator
+from app.infrastructure.tools import get_tool_registry
+from app.core.config import get_settings
+from app.core.security import CurrentUser, get_current_user, require_user
+from app.domain.models import (
+    ChatRequest,
+    ChatResponse,
+    ConversationDetail,
+    ConversationSummary,
+    HealthResponse,
+    IngestRequest,
+    IngestResponse,
+    MessageRole,
+    RenameConversationRequest,
+    SearchRequest,
+    SourceDocument,
+)
+from app.infrastructure.rag import get_rag_pipeline
+from app.infrastructure.vector_store import get_vector_store
+from app.application.chat_history import get_chat_history
+from app.infrastructure.seed import seed_knowledge_base
+
+router = APIRouter()
+
+
+# ============================================================
+# Health
+# ============================================================
+
+@router.get("/health", response_model=HealthResponse)
+async def health():
+    settings = get_settings()
+    store = await get_vector_store()
+    count = await store.count()
+    return HealthResponse(
+        llm_provider=settings.llm_provider,
+        embedding_model=settings.embedding_model,
+        documents_count=count,
+    )
+
+
+# ============================================================
+# Chat
+# ============================================================
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(
+    body: ChatRequest,
+    user: Optional[CurrentUser] = Depends(get_current_user),
+    authorization: Optional[str] = Header(default=None),
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
+):
+    token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1]
+
+    # ✅ Historique : récupère ou crée la conversation
+    history = await get_chat_history()
+    conv = await history.get_or_create(
+        conversation_id=body.conversation_id,
+        user_id=user.user_id if user else None,
+        session_id=_session_id_from_header(x_session_id),
+        mode=body.mode,
+    )
+
+    # ✅ Sauvegarde du message utilisateur
+    await history.add_message(
+        conversation_id=conv.id,
+        role=MessageRole.USER,
+        content=body.message,
+    )
+
+    # ✅ Récupération des 4 derniers messages pour le contexte
+    msgs = await history.get_messages(conv.id)
+    history_text = "\n".join([f"{m.role.value}: {m.content}" for m in msgs[-4:]])
+    print(f"[DEBUG ROUTES] History ({len(history_text)} chars):\n{history_text}", flush=True)
+    print(f"[DEBUG ROUTES] Historique envoyé à l'IA :\n{history_text}", flush=True)
+
+    # Appel orchestrateur
+    orchestrator = get_orchestrator()
+    response = await orchestrator.handle(
+        message=body.message,
+        mode=body.mode,
+        conversation_id=conv.id,
+        auth_token=token,
+        user_id=user.user_id if user else None,
+        context=body.context,
+        history=history_text,  # ✅ On passe le contexte
+    )
+
+    # ✅ Calcul du nombre d'articles ajoutés au panier
+    cart_added = 0
+    for tc in response.tool_calls:
+        if tc.name in ("add_to_cart", "add_build_to_cart"):
+            if isinstance(tc.result, dict):
+                cart_added += tc.result.get("count", 0)
+
+    # ✅ Sauvegarde de la réponse assistant
+    await history.add_message(
+        conversation_id=conv.id,
+        role=MessageRole.ASSISTANT,
+        content=response.reply,
+        mode=response.mode,
+        sources=response.sources,
+        tool_calls=response.tool_calls,
+        cart_added=cart_added,
+        latency_ms=response.latency_ms,
+    )
+
+    # Propager cart_added calcule si l'orchestrateur ne l'a pas deja
+    if getattr(response, "cart_added", 0) == 0 and cart_added:
+        response.cart_added = cart_added
+    return response
+
+
+# ============================================================
+# Configurateur PC
+# ============================================================
+
+@router.post("/configure")
+async def configure_pc(
+    body: dict,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Configurateur PC: usage + budget (Ar) → composants catalogue."""
+    token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1]
+    usage = body.get("usage") or "gaming"
+    budget = body.get("budget") or 0
+    registry = get_tool_registry()
+    result = await registry.execute(
+        "suggest_pc_build",
+        {"usage": usage, "budget": budget},
+        auth_token=token,
+    )
+    return {"success": True, "data": result}
+
+
+# ============================================================
+# RAG
+# ============================================================
+
+@router.post("/rag/search", response_model=list[SourceDocument])
+async def rag_search(body: SearchRequest):
+    rag = await get_rag_pipeline()
+    return await rag.retrieve(
+        query=body.query,
+        top_k=body.limit,
+        category=body.category,
+    )
+
+
+# ============================================================
+# Base de connaissance
+# ============================================================
+
+@router.post("/knowledge/ingest", response_model=IngestResponse)
+async def ingest_documents(
+    body: IngestRequest,
+    user: CurrentUser = Depends(require_user),
+):
+    if user.role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Acces admin requis")
+
+    store = await get_vector_store()
+    ids = await store.ingest(body.documents)
+    return IngestResponse(ingested=len(ids), ids=ids)
+
+
+@router.get("/knowledge/documents")
+async def list_documents(
+    user: CurrentUser = Depends(require_user),
+    limit: int = 50,
+):
+    if user.role not in ("admin", "super_admin", "technician"):
+        raise HTTPException(status_code=403, detail="Acces refuse")
+    store = await get_vector_store()
+    docs = await store.list_documents(limit=limit)
+    return {"success": True, "data": docs}
+
+
+@router.delete("/knowledge/documents/{doc_id}")
+async def delete_document(
+    doc_id: str,
+    user: CurrentUser = Depends(require_user),
+):
+    if user.role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Acces admin requis")
+    store = await get_vector_store()
+    ok = await store.delete(doc_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    return {"success": True, "message": "Document supprime"}
+
+
+@router.post("/knowledge/seed")
+async def seed_kb(user: CurrentUser = Depends(require_user)):
+    if user.role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Acces admin requis")
+    count = await seed_knowledge_base()
+    return {"success": True, "message": f"{count} documents indexes"}
+
+
+# ============================================================
+# Outils (Function Calling)
+# ============================================================
+
+@router.get("/tools")
+async def list_tools():
+    registry = get_tool_registry()
+    return {"success": True, "data": registry.list_schemas()}
+
+
+# ============================================================
+# Historique de chat
+# ============================================================
+
+def _session_id_from_header(x_session_id: Optional[str]) -> Optional[str]:
+    """Récupère l'ID de session anonyme depuis le header."""
+    return x_session_id if x_session_id else None
+
+
+def _check_ownership(conv, user_id: Optional[str], session_id: Optional[str]) -> None:
+    """Vérifie que l'utilisateur (ou la session anonyme) est bien propriétaire."""
+    if conv.user_id and conv.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Acces refuse")
+    if not conv.user_id and conv.session_id and conv.session_id != session_id:
+        raise HTTPException(status_code=403, detail="Acces refuse")
+
+
+# ⚠️ IMPORTANT : les routes statiques doivent être AVANT les routes dynamiques
+# Sinon "/conversations/stats/summary" serait interprété comme un {conversation_id}
+@router.get("/conversations/stats/summary")
+async def conversation_stats(
+    user: CurrentUser = Depends(require_user),
+):
+    """Statistiques des conversations (admin uniquement)."""
+    if user.role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Acces admin requis")
+    history = await get_chat_history()
+    return {"success": True, "data": await history.get_stats()}
+
+
+@router.get("/conversations", response_model=list[ConversationSummary])
+async def list_conversations(
+    user: Optional[CurrentUser] = Depends(get_current_user),
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
+):
+    """Liste les conversations de l'utilisateur connecté ou de la session anonyme."""
+    history = await get_chat_history()
+    return await history.list_conversations(
+        user_id=user.user_id if user else None,
+        session_id=_session_id_from_header(x_session_id),
+    )
+
+
+@router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
+async def get_conversation(
+    conversation_id: str,
+    user: Optional[CurrentUser] = Depends(get_current_user),
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
+):
+    """Détail d'une conversation (vérifie la propriété)."""
+    history = await get_chat_history()
+    detail = await history.get_detail(conversation_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Conversation introuvable")
+
+    conv = await history.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation introuvable")
+
+    _check_ownership(
+        conv,
+        user.user_id if user else None,
+        _session_id_from_header(x_session_id),
+    )
+    return detail
+
+
+@router.patch("/conversations/{conversation_id}")
+async def rename_conversation(
+    conversation_id: str,
+    body: RenameConversationRequest,
+    user: Optional[CurrentUser] = Depends(get_current_user),
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
+):
+    """Renomme une conversation."""
+    history = await get_chat_history()
+    conv = await history.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation introuvable")
+
+    _check_ownership(
+        conv,
+        user.user_id if user else None,
+        _session_id_from_header(x_session_id),
+    )
+
+    ok = await history.rename_conversation(conversation_id, body.title)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Renommage impossible")
+    return {"success": True, "message": "Conversation renommee"}
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    user: Optional[CurrentUser] = Depends(get_current_user),
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
+):
+    """Supprime une conversation et ses messages."""
+    history = await get_chat_history()
+    conv = await history.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation introuvable")
+
+    _check_ownership(
+        conv,
+        user.user_id if user else None,
+        _session_id_from_header(x_session_id),
+    )
+
+    await history.delete_conversation(conversation_id)
+    return {"success": True, "message": "Conversation supprimee"}
+
+
+==========================================
+FILE: app/main.py
+==========================================
+"""Point d'entree FastAPI — Service IA L'AMI."""
+
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.config import get_settings
+from app.infrastructure.embeddings import get_embedding_service
+from app.infrastructure.seed import seed_knowledge_base
+from app.infrastructure.vector_store import close_vector_store, get_vector_store
+from app.interfaces.routes import router
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger("ia-service")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    logger.info("Demarrage IA Service (provider=%s)", settings.llm_provider)
+
+    emb = get_embedding_service()
+    logger.info("Embeddings backend: %s (dim=%s)", emb.backend, emb.dimension)
+
+    try:
+        store = await get_vector_store()
+        count = await seed_knowledge_base()
+        total = await store.count()
+        logger.info("Base de connaissances: %s documents (seed +%s)", total, count)
+    except Exception as e:
+        logger.warning("MongoDB indisponible au demarrage: %s", e)
+
+    yield
+
+    await close_vector_store()
+    logger.info("Arret IA Service")
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    app = FastAPI(
+        title=settings.app_name,
+        version="2.0.0",
+        description=(
+            "Service IA L'AMI — Assistant conversationnel "
+            "(LLM + RAG + Function Calling) — Clean Architecture"
+        ),
+        lifespan=lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Session-Id",
+            "Accept",
+            "Origin",
+            "X-Requested-With",
+        ],
+        expose_headers=["X-Session-Id"],
+    )
+
+    app.include_router(router, prefix="/api/v1/ia", tags=["IA"])
+
+    @app.get("/")
+    async def root():
+        return {
+            "service": "lami-ia",
+            "version": "2.0.0",
+            "docs": "/docs",
+            "health": "/api/v1/ia/health",
+        }
+
+    return app
+
+
+app = create_app()
+
+
