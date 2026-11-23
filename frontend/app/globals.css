@@ -155,3 +155,12 @@ html { color-scheme: light; }
 ::-webkit-scrollbar-track { background: var(--bg-app); }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; border: 2px solid var(--bg-app); }
 ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
+
+/* ============================================================
+   CHAT — scrollbar fine + safe-area iOS/Android
+   ============================================================ */
+.chat-scroll { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.chat-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.chat-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }

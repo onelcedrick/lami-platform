@@ -6,6 +6,7 @@ import { LogoIcon, CartIcon, MenuIcon, HeartIcon } from "@/components/ui/icons";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import SmartSearch from "@/components/search/SmartSearch";
 import UserMenu from "@/components/layout/UserMenu";
+import LoginPopover from "@/components/auth/LoginPopover";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { SearchableProduct } from "@/lib/search";
@@ -115,25 +116,7 @@ export default function Header() {
             <UserMenu />
           ) : (
             <div className="hidden items-center gap-2 sm:flex">
-              <Link
-                href="/login"
-                className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--fg-secondary)] transition-all hover:bg-[var(--bg-muted)] hover:text-[var(--cyan)]"
-                title="Connexion"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </Link>
+              <LoginPopover />
             </div>
           )}
 

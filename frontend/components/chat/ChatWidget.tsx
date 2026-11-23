@@ -1,617 +1,276 @@
 "use client";
-
+/**
+ * ============================================================
+ * CHAT WIDGET — coquille ultra-moderne & responsive
+ * ============================================================
+ * ARCHITECTURE CLEAN :
+ *   ChatWidget (UI) → useChat (logique) → chatService (API)
+ *
+ * RESPONSIVE :
+ *   - Mobile  : panneau plein écran (inset-0) + safe-area
+ *   - Desktop : carte flottante 420px, coins arrondis, ombre profonde
+ *
+ * DESIGN : glassmorphism, dégradés cyan/bleu, micro-animations
+ * spring (framer-motion), scrollbar fine personnalisée.
+ */
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useChat } from "@/hooks/use-chat";
 import { useChatStore } from "@/lib/chat-store";
-import { useState, useRef, useEffect, useCallback } from "react";
-import Link from "next/link";
-import { LogoIcon, PlusIcon, TrashIcon, MessageIcon, XIcon, CartIcon, StarIcon } from "@/components/ui/icons";
-import { useCartStore, useAuthStore } from "@/lib/store";
-import { pushCartToServer } from "@/lib/sync-account";
-import { formatAriary } from "@/lib/currency";
-
-interface ProductCardData {
-  id: string;
-  name: string;
-  brand: string;
-  price: number;
-  stock: number;
-  image?: string;
-  slug?: string;
-  rating?: number;
-}
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  mode?: string;
-  sources?: { title: string; score: number }[];
-  cartAdded?: number;
-  products?: ProductCardData[];
-  created_at?: string;
-}
-
-interface ConversationSummary {
-  id: string;
-  title: string;
-  mode: string;
-  message_count: number;
-  last_message_at: string;
-  created_at: string;
-}
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { DEFAULT_CHAT_CONFIG } from "@/lib/chat/chat-types";
+import MessageBubble from "./MessageBubble";
+import TypingIndicator from "./TypingIndicator";
+import ChatInput from "./ChatInput";
+import { MessageIcon, XIcon, PlusIcon, ClockIcon, TrashIcon } from "@/components/ui/icons";
 
 export default function ChatWidget() {
-  const open = useChatStore((s) => s.open);
-  const openChat = useChatStore((s) => s.openChat);
-  const closeChat = useChatStore((s) => s.closeChat);
-  const toggleChat = useChatStore((s) => s.toggleChat);
+  const chat = useChat();
   const consumePendingData = useChatStore((s) => s.consumePendingData);
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("lami-chat-id");
-    return null;
-  });
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-
   const bottomRef = useRef<HTMLDivElement>(null);
-  const addItem = useCartStore((s) => s.addItem);
-  const isAuth = useAuthStore((s) => s.isAuthenticated);
+  const [mounted, setMounted] = useState(false);
 
-  const getSessionId = useCallback((): string => {
-    if (typeof window === "undefined") return "";
-    let sid = localStorage.getItem("lami-ia-session");
-    if (!sid) {
-      sid = `anon-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-      localStorage.setItem("lami-ia-session", sid);
-    }
-    return sid;
-  }, []);
+  useEffect(() => setMounted(true), []);
 
-  const buildHeaders = useCallback((): Record<string, string> => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "X-Session-Id": getSessionId(),
-    };
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("access_token");
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-    }
-    return headers;
-  }, [getSessionId]);
-
-  // Message d'accueil — SANS EMOJI
+  // Scroll automatique vers le dernier message
   useEffect(() => {
-    if (messages.length === 0) {
-      setMessages([
-        {
-          role: "assistant",
-          content:
-            "Bonjour, je suis l'assistant L'AMI.\n\nJe peux vous aider à :\n• Trouver des composants PC\n• Configurer une machine selon votre budget\n• Diagnostiquer un problème technique\n\nQue recherchez-vous ?",
-        },
-      ]);
-    }
-  }, [messages.length]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [chat.messages, chat.isLoading]);
 
-  // ✅ Clean Architecture : consomme le message ET le contexte depuis le store
+  // Consomme le message/contexte en attente (bouton "Demander à l'IA")
   useEffect(() => {
-    if (!open) return;
+    if (!chat.isOpen) return;
     const { message, context } = consumePendingData();
-    if (message && !loading) {
-      send(message, context ?? undefined);
-    }
-  }, [open, consumePendingData]);
+    if (message) void chat.sendMessage(message, context ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.isOpen]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, open]);
-
-  useEffect(() => {
-    if (open && showHistory) loadConversations();
-  }, [open, showHistory]);
-
-  const loadConversations = async () => {
-    setHistoryLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/ia/conversations`, {
-        headers: buildHeaders(),
-      });
-      const json = await res.json();
-      if (Array.isArray(json)) setConversations(json);
-    } catch {
-      /* silent */
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const loadConversation = async (id: string) => {
-    setHistoryLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/ia/conversations/${id}`, {
-        headers: buildHeaders(),
-      });
-      const json = await res.json();
-      if (json.messages) {
-        setMessages(
-          json.messages.map((m: any) => ({
-            role: m.role,
-            content: m.content,
-            mode: m.mode,
-            sources: m.sources,
-            cartAdded: m.cart_added,
-            products: m.products || [],
-            created_at: m.created_at,
-          }))
-        );
-        setConversationId(id);
-        setShowHistory(false);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const deleteConversation = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm("Supprimer cette conversation ?")) return;
-    try {
-      await fetch(`${API_BASE}/api/v1/ia/conversations/${id}`, {
-        method: "DELETE",
-        headers: buildHeaders(),
-      });
-      setConversations((c) => c.filter((x) => x.id !== id));
-      if (conversationId === id) startNewConversation();
-    } catch {
-      /* silent */
-    }
-  };
-
-  const startNewConversation = () => {
-    setMessages([
-      {
-        role: "assistant",
-        content: "Nouvelle conversation. Comment puis-je vous aider ?",
-      },
-    ]);
-    setConversationId(null);
-    setShowHistory(false);
-  };
-
-  const send = async (
-    forcedText?: string,
-    forcedContext?: import("@/lib/chat-types").ChatContextPayload
-  ) => {
-    const text = forcedText || input.trim();
-    if (!text || loading) return;
-
-    if (!forcedText) setInput("");  // Ne vide pas l'input si c'est un contexte auto
-    setMessages((m) => [...m, { role: "user", content: text }]);
-    setLoading(true);
-
-    try {
-      // ✅ On prépare l'historique local pour l'envoyer au backend
-      const historyPayload = messages
-        .filter(m => m.role === "user" || m.role === "assistant")
-        .slice(-5) // Garde les 5 derniers messages (max)
-        .map(m => ({ role: m.role, content: m.content }));
-
-      const res = await fetch(`${API_BASE}/api/v1/ia/chat`, {
-        method: "POST",
-        headers: buildHeaders(),
-        body: JSON.stringify({
-          message: text,
-          conversation_id: conversationId,
-          mode: "auto",
-          context: forcedContext,
-          recent_history: historyPayload, // ✅ Envoi de l'historique
-        }),
-      });
-
-      const json = await res.json();
-      const data = json.data || json;
-
-      if (data.conversation_id) {
-        setConversationId(data.conversation_id);
-        localStorage.setItem("lami-chat-id", data.conversation_id);
-      }
-
-      let cartAdded = 0;
-      const toolCalls = data.tool_calls || [];
-      for (const tc of toolCalls) {
-        if (
-          (tc.name === "add_to_cart" || tc.name === "add_build_to_cart") &&
-          tc.result?.items
-        ) {
-          for (const it of tc.result.items) {
-            if (!it.product_id && !it.id) continue;
-            addItem({
-              productId: it.product_id || it.id,
-              name: it.name || "Composant",
-              price: Number(it.price) || 0,
-              quantity: Number(it.quantity) || 1,
-              image: it.image || undefined,
-            });
-            cartAdded++;
-          }
-        }
-      }
-      if (cartAdded > 0 && isAuth()) void pushCartToServer();
-
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          content: data.reply || "Désolé, une erreur est survenue.",
-          mode: data.mode,
-          cartAdded: cartAdded || undefined,
-          products: data.products || [],
-          sources: data.sources?.map((s: { title: string; score: number }) => ({
-            title: s.title,
-            score: s.score,
-          })),
-        },
-      ]);
-    } catch {
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          content: "Le service IA est temporairement indisponible. Réessayez dans un instant.",
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ----- Ajouter au panier depuis une card -----
-  const handleAddToCart = (p: ProductCardData) => {
-    addItem({
-      productId: p.id,
-      name: p.name,
-      price: p.price,
-      quantity: 1,
-      image: p.image,
-    });
-    if (isAuth()) void pushCartToServer();
-  };
+  if (!mounted) return null;
 
   return (
     <>
-      {/* Bouton flottant */}
-      <button
-        onClick={toggleChat}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-xl shadow-primary-900/30 transition hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-        aria-label="Ouvrir l'assistant"
+      {/* ============ BOUTON FLOTTANT ============ */}
+      <motion.button
+        type="button"
+        onClick={chat.toggleChat}
+        whileHover={{ scale: 1.06 }}
+        whileTap={{ scale: 0.94 }}
+        aria-label={chat.isOpen ? "Fermer l'assistant" : "Ouvrir l'assistant"}
+        className="fixed bottom-5 right-5 z-[70] flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--cyan)] to-blue-600 text-[var(--navy-deep)] shadow-xl shadow-[var(--cyan)]/30 transition-colors sm:bottom-6 sm:right-6 sm:rounded-full"
       >
-        {open ? (
-          <XIcon size={24} />
-        ) : (
-          <>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            <span className="absolute -right-0.5 -top-0.5 h-3 w-3 animate-pulse rounded-full bg-emerald-400 ring-2 ring-white" />
-          </>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={chat.isOpen ? "close" : "open"}
+            initial={{ rotate: -90, opacity: 0 }}
+            animate={{ rotate: 0, opacity: 1 }}
+            exit={{ rotate: 90, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="flex items-center justify-center"
+          >
+            {chat.isOpen ? <XIcon size={24} /> : <MessageIcon size={24} />}
+          </motion.span>
+        </AnimatePresence>
+        {/* Pastille "en ligne" */}
+        {!chat.isOpen && (
+          <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-slate-900" />
+          </span>
         )}
-      </button>
+      </motion.button>
 
-      {open && (
-        <div className="fixed bottom-24 right-6 z-50 flex h-[620px] w-[400px] flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-2xl dark:border-slate-700/50 dark:bg-slate-900">
-          {/* Header */}
-          <div className="flex items-center gap-3 border-b border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-white">
-              <LogoIcon size={22} />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {showHistory ? "Historique" : "Assistant L'AMI"}
-              </p>
-              <p className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                {showHistory
-                  ? `${conversations.length} conversation${conversations.length > 1 ? "s" : ""}`
-                  : "En ligne"}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowHistory(!showHistory)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
-              title={showHistory ? "Retour" : "Historique"}
-            >
-              {showHistory ? <PlusIcon size={16} /> : <MessageIcon size={16} />}
-            </button>
-            {!showHistory && (
-              <button
-                type="button"
-                onClick={startNewConversation}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
-                title="Nouvelle conversation"
-              >
-                <PlusIcon size={16} />
-              </button>
-            )}
-          </div>
-
-          {/* Vue historique */}
-          {showHistory ? (
-            <div className="flex-1 overflow-y-auto p-2">
-              {historyLoading ? (
-                <div className="space-y-2 p-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
-                  ))}
+      {/* ============ PANNEAU DE CHAT ============ */}
+      <AnimatePresence>
+        {chat.isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 28, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 28, scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 320, damping: 30 }}
+            role="dialog"
+            aria-label="Assistant L'AMI"
+            className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-[var(--bg-surface)]/95 backdrop-blur-2xl sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[min(680px,calc(100vh-7.5rem))] sm:w-[420px] sm:rounded-3xl sm:border sm:border-[var(--border)] sm:shadow-2xl sm:shadow-black/20"
+          >
+            {/* ---------- EN-TÊTE GLASS ---------- */}
+            <header className="flex items-center gap-3 border-b border-[var(--border)] bg-gradient-to-r from-[var(--bg-surface)]/90 to-[var(--bg-muted)]/60 px-4 py-3 backdrop-blur-xl">
+              {/* Avatar dégradé + halo */}
+              <div className="relative">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--cyan)] to-blue-600 text-[var(--navy-deep)] shadow-lg shadow-[var(--cyan)]/30">
+                  <MessageIcon size={20} />
                 </div>
-              ) : conversations.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <MessageIcon size={28} className="text-slate-300 dark:text-slate-600" />
-                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                    Aucune conversation
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {conversations.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => loadConversation(c.id)}
-                      className={`group flex w-full items-start gap-2.5 rounded-xl p-2.5 text-left transition ${
-                        conversationId === c.id
-                          ? "bg-primary-50 dark:bg-primary-950/40"
-                          : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                      }`}
-                    >
-                      <div
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                          conversationId === c.id
-                            ? "bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300"
-                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                        }`}
-                      >
-                        <MessageIcon size={14} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-medium text-slate-900 dark:text-slate-100">
-                          {c.title}
-                        </p>
-                        <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                          {c.message_count} msg ·{" "}
-                          {new Date(c.last_message_at).toLocaleDateString("fr-FR", {
-                            day: "2-digit",
-                            month: "short",
-                          })}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => deleteConversation(c.id, e)}
-                        className="rounded p-1 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/40"
-                        title="Supprimer"
-                      >
-                        <TrashIcon size={12} />
-                      </button>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Messages */}
-              <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    {msg.role === "assistant" && (
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-600 text-white">
-                        <LogoIcon size={14} />
-                      </div>
-                    )}
-                    <div className="max-w-[85%] space-y-2">
-                      <div
-                        className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                          msg.role === "user"
-                            ? "rounded-br-sm bg-primary-600 text-white"
-                            : "rounded-bl-sm bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-[var(--bg-surface)]" />
+              </div>
 
-                        {msg.cartAdded ? (
-                          <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            {msg.cartAdded} article(s) ajouté(s)
-                          </div>
-                        ) : null}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-[var(--fg-primary)]">
+                  {chat.showHistory ? "Historique" : "Assistant L'AMI"}
+                </p>
+                <p className="flex items-center gap-1.5 text-[11px] text-[var(--fg-muted)]">
+                  {chat.showHistory ? (
+                    <>
+                      <ClockIcon size={11} />
+                      {chat.historyLoading ? "Chargement…" : `${chat.conversations.length} conversation${chat.conversations.length > 1 ? "s" : ""}`}
+                    </>
+                  ) : (
+                    <>
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                      En ligne · répond en ~3 s
+                    </>
+                  )}
+                </p>
+              </div>
 
-                        {msg.sources && msg.sources.length > 0 && (
-                          <details className="mt-2 border-t border-slate-200/60 pt-2 dark:border-slate-700">
-                            <summary className="cursor-pointer text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              {msg.sources.length} source(s)
-                            </summary>
-                            <div className="mt-1.5 space-y-1">
-                              {msg.sources.map((s, j) => (
-                                <p key={j} className="flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
-                                  <span className="truncate">{s.title}</span>
-                                  <span className="shrink-0 rounded-full bg-primary-100 px-1.5 py-0.5 text-[9px] font-semibold text-primary-700 dark:bg-primary-950/50 dark:text-primary-300">
-                                    {(s.score * 100).toFixed(0)}%
-                                  </span>
-                                </p>
-                              ))}
-                            </div>
-                          </details>
-                        )}
-                      </div>
+              {/* Actions */}
+              <div className="flex items-center gap-1">
+                <HeaderButton
+                  onClick={chat.toggleHistory}
+                  label={chat.showHistory ? "Retour au chat" : "Historique"}
+                >
+                  {chat.showHistory ? <MessageIcon size={16} /> : <ClockIcon size={16} />}
+                </HeaderButton>
+                {!chat.showHistory && (
+                  <HeaderButton onClick={chat.startNewConversation} label="Nouvelle conversation">
+                    <PlusIcon size={16} />
+                  </HeaderButton>
+                )}
+                {/* Fermer (surtout utile en mobile plein écran) */}
+                <HeaderButton onClick={chat.closeChat} label="Fermer">
+                  <XIcon size={16} />
+                </HeaderButton>
+              </div>
+            </header>
 
-                      {/* ✅ Cards produits */}
-                      {msg.products && msg.products.length > 0 && (
-                        <div className="space-y-1.5">
-                          {msg.products.map((p) => (
-                            <ProductCardInline
-                              key={p.id}
-                              product={p}
-                              onAdd={() => handleAddToCart(p)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
+            {/* ---------- CONTENU ---------- */}
+            {chat.showHistory ? (
+              /* ===== VUE HISTORIQUE ===== */
+              <div className="chat-scroll flex-1 overflow-y-auto p-2">
+                {chat.historyLoading ? (
+                  <div className="space-y-2 p-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-16 animate-pulse rounded-2xl bg-[var(--bg-muted)]" />
+                    ))}
                   </div>
-                ))}
+                ) : chat.conversations.length === 0 ? (
+                  <EmptyHistory />
+                ) : (
+                  <ul className="space-y-1">
+                    {chat.conversations.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onClick={() => void chat.loadConversation(c.id)}
+                          className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
+                            chat.conversationId === c.id
+                              ? "bg-[var(--cyan)]/10 ring-1 ring-[var(--cyan)]/40"
+                              : "hover:bg-[var(--bg-muted)]"
+                          }`}
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-muted)] text-[var(--fg-muted)] group-hover:text-[var(--cyan)]">
+                            <MessageIcon size={15} />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-semibold text-[var(--fg-primary)]">{c.title}</span>
+                            <span className="block text-[10px] text-[var(--fg-muted)]">
+                              {c.message_count} msg ·{" "}
+                              {new Date(c.last_message_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+                            </span>
+                          </span>
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void chat.deleteConversation(c.id);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.stopPropagation();
+                                void chat.deleteConversation(c.id);
+                              }
+                            }}
+                            className="rounded-lg p-1.5 text-[var(--fg-muted)] opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 dark:hover:bg-red-950/40"
+                            aria-label={`Supprimer ${c.title}`}
+                          >
+                            <TrashIcon size={13} />
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              /* ===== VUE MESSAGES ===== */
+              <>
+                <div className="chat-scroll flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-4">
+                  {chat.messages.map((msg) => (
+                    <MessageBubble key={msg.id} message={msg} onAddToCart={chat.addProductToCart} />
+                  ))}
+                  {chat.isLoading && <TypingIndicator />}
+                  <div ref={bottomRef} />
+                </div>
 
-                {loading && (
-                  <div className="flex gap-2 justify-start">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-600 text-white">
-                      <LogoIcon size={14} />
-                    </div>
-                    <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-3 dark:bg-slate-800">
-                      <div className="flex gap-1">
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]" />
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]" />
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" />
-                      </div>
-                    </div>
+                {/* Suggestions rapides (premier écran) */}
+                {chat.messages.length <= 1 && (
+                  <div className="chat-scroll flex gap-1.5 overflow-x-auto border-t border-[var(--border)] px-3 py-2">
+                    {DEFAULT_CHAT_CONFIG.quickSuggestions.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => void chat.sendMessage(s)}
+                        className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-[11px] font-medium text-[var(--fg-secondary)] transition hover:border-[var(--cyan)]/60 hover:bg-[var(--cyan)]/10 hover:text-[var(--cyan)]"
+                      >
+                        {s}
+                      </button>
+                    ))}
                   </div>
                 )}
-                <div ref={bottomRef} />
-              </div>
 
-              {/* Suggestions rapides */}
-              {messages.length <= 1 && (
-                <div className="flex flex-wrap gap-1.5 border-t border-slate-100 px-4 py-2 dark:border-slate-800">
-                  {[
-                    "PC gaming 3M Ar",
-                    "Config bureautique 1.5M",
-                    "Écran bleu au démarrage",
-                    "RTX 4070",
-                  ].map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setInput(s)}
-                      className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-700 dark:hover:bg-primary-950/40"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Input */}
-              <div className="border-t border-slate-100 p-3 dark:border-slate-800">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    send();
-                  }}
-                  className="flex gap-2"
-                >
-                  <input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Posez votre question..."
-                    className="input-field flex-1 text-sm"
-                    disabled={loading}
-                  />
-                  <button
-                    type="submit"
-                    disabled={loading || !input.trim()}
-                    className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600 text-white transition hover:bg-primary-700 disabled:opacity-50"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="m22 2-7 20-4-9-9-4Z" />
-                      <path d="M22 2 11 13" />
-                    </svg>
-                  </button>
-                </form>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+                <ChatInput disabled={chat.isLoading} onSubmit={(t) => void chat.sendMessage(t)} />
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Card produit inline dans le chat
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------ */
+/* Sous-composants locaux                                        */
+/* ------------------------------------------------------------ */
 
-function ProductCardInline({
-  product,
-  onAdd,
+/** Bouton d'action de l'en-tête (icône seule, avec tooltip) */
+function HeaderButton({
+  onClick,
+  label,
+  children,
 }: {
-  product: ProductCardData;
-  onAdd: () => void;
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
 }) {
-  const href = `/product/${encodeURIComponent(product.slug || product.id)}`;
-
   return (
-    <div className="flex gap-2.5 rounded-xl border border-slate-200 bg-white p-2 transition hover:border-primary-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-700">
-      {/* Image */}
-      <Link
-        href={href}
-        className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-700"
-      >
-        {product.image ? (
-          <img
-            src={product.image}
-            alt={product.name}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
-            {product.brand?.slice(0, 2) || "?"}
-          </div>
-        )}
-      </Link>
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="flex h-8 w-8 items-center justify-center rounded-xl text-[var(--fg-muted)] transition hover:bg-[var(--bg-muted)] hover:text-[var(--fg-primary)] active:scale-95"
+    >
+      {children}
+    </button>
+  );
+}
 
-      {/* Infos */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Link
-          href={href}
-          className="line-clamp-1 text-xs font-medium text-slate-900 hover:text-primary-600 dark:text-slate-100 dark:hover:text-primary-400"
-        >
-          {product.name}
-        </Link>
-        <p className="text-[10px] uppercase tracking-wide text-slate-400">
-          {product.brand}
-        </p>
-        <div className="mt-auto flex items-center justify-between gap-1.5 pt-1">
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-primary-600 dark:text-primary-400">
-              {formatAriary(product.price)}
-            </p>
-            {product.rating && product.rating > 0 && (
-              <span className="flex items-center gap-0.5 text-[10px] text-amber-500">
-                <StarIcon size={10} />
-                {product.rating.toFixed(1)}
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onAdd}
-            disabled={product.stock <= 0}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-primary-600 px-2 text-[10px] font-medium text-white transition hover:bg-primary-700 disabled:opacity-50"
-          >
-            <CartIcon size={10} />
-            Ajouter
-          </button>
-        </div>
+/** État vide de l'historique */
+function EmptyHistory() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--bg-muted)] text-[var(--fg-muted)]">
+        <ClockIcon size={24} />
       </div>
+      <p className="mt-3 text-sm font-medium text-[var(--fg-secondary)]">Aucune conversation</p>
+      <p className="mt-1 text-xs text-[var(--fg-muted)]">Vos échanges apparaîtront ici.</p>
     </div>
   );
 }
