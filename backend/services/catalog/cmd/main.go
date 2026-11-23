@@ -118,7 +118,7 @@ func main() {
 	app.Use(middleware.SecureCORS())
 	app.Use(middleware.RateLimit(cfg.RateLimit))
 
-	httpHandler.SetupRoutes(app, handler, cfg.JWTSecret)
+	httpHandler.SetupRoutes(app, handler, reviewHandler, cfg.JWTSecret)
 
 	go func() {
 		addr := ":" + cfg.HTTPPort

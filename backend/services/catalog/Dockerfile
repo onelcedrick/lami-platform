@@ -4,7 +4,7 @@ FROM golang:1.22-alpine AS builder
 WORKDIR /app
 
 # Proxy Go rapide + désactivation vérification somme
-ENV GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=https://proxy.golang.org,direct
 ENV GOSUMDB=off
 ENV GOTOOLCHAIN=local
 

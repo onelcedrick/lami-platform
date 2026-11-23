@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lami-platform/shared/pkg/mongodb"
 	"github.com/lami-platform/services/catalog/internal/domain"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -14,7 +15,7 @@ type MongoReviewRepository struct {
 	collection *mongo.Collection
 }
 
-func NewMongoReviewRepository(db *mongo.Database) *MongoReviewRepository {
+func NewMongoReviewRepository(db *mongodb.Client) *MongoReviewRepository {
 	return &MongoReviewRepository{
 		collection: db.Collection("reviews"),
 	}
