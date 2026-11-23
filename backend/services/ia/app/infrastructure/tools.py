@@ -1,28 +1,54 @@
 """
-Registre d'outils (Function Calling) — appels HTTP vers microservices Go.
-Pattern Registry + Adapter.
-"""
+Registre d'outils (Function Calling) — Pattern Registry + Adapter.
 
+La lecture du catalogue passe par CatalogCache (recherche / categorie /
+budget / tri cote Python). Seule la creation de ticket reste un appel HTTP
+direct vers le microservice Go.
+"""
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Optional
-from uuid import uuid4
 
 import httpx
 
 from app.core.config import get_settings
 from app.domain.models import ProductCard, ToolCallResult
 from app.domain.ports import ToolPort
+from app.infrastructure.catalog_cache import (
+    _price,
+    _rating,
+    _stock,
+    get_catalog_cache,
+    resolve_categories,
+)
+
+logger = logging.getLogger("ia.tools")
+
+# Profils de configuration : poids normalises a 1.0, carte mere incluse.
+BUILD_PROFILES: dict[str, dict[str, float]] = {
+    "gaming": {
+        "GPU": 0.32, "CPU": 0.20, "Carte mere": 0.12, "RAM": 0.10,
+        "Stockage": 0.09, "Alimentation": 0.09, "Boitier": 0.08,
+    },
+    "bureautique": {
+        "CPU": 0.28, "Carte mere": 0.18, "Stockage": 0.16,
+        "RAM": 0.14, "Alimentation": 0.13, "Boitier": 0.11,
+    },
+    "creation": {
+        "GPU": 0.26, "CPU": 0.24, "RAM": 0.14, "Stockage": 0.12,
+        "Carte mere": 0.12, "Alimentation": 0.08, "Boitier": 0.04,
+    },
+    "streaming": {
+        "CPU": 0.26, "GPU": 0.24, "RAM": 0.12, "Carte mere": 0.12,
+        "Stockage": 0.11, "Alimentation": 0.09, "Boitier": 0.06,
+    },
+}
 
 
 class ToolDefinition:
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        parameters: dict[str, Any],
-        handler: Callable,
-    ):
+    def __init__(self, name: str, description: str,
+                 parameters: dict[str, Any], handler: Callable):
         self.name = name
         self.description = description
         self.parameters = parameters
@@ -39,6 +65,18 @@ class ToolDefinition:
         }
 
 
+def _first_image(p: dict) -> Optional[str]:
+    imgs = p.get("images")
+    if isinstance(imgs, list) and imgs:
+        v = imgs[0]
+        if isinstance(v, str) and v:
+            return v
+    if isinstance(imgs, str) and imgs:
+        return imgs
+    v = p.get("image")
+    return v if isinstance(v, str) and v else None
+
+
 class ToolRegistry(ToolPort):
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -52,146 +90,87 @@ class ToolRegistry(ToolPort):
         return [t.schema() for t in self._tools.values()]
 
     def _register_defaults(self) -> None:
-        self.register(
-            ToolDefinition(
-                name="search_products",
-                description=(
-                    "Recherche des produits dans le catalogue L'AMI "
-                    "(CPU, GPU, RAM, PC, etc.). Filtre optionnel par budget Ariary."
-                ),
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "search": {"type": "string", "description": "Texte de recherche"},
-                        "category": {"type": "string", "description": "Categorie optionnelle"},
-                        "max_price": {"type": "number", "description": "Budget max en Ariary"},
-                        "limit": {"type": "integer", "description": "Nombre max (defaut 5)"},
-                    },
+        self.register(ToolDefinition(
+            name="search_products",
+            description="Recherche des produits du catalogue L'AMI (categorie, budget Ariary).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "search": {"type": "string"},
+                    "category": {"type": "string"},
+                    "max_price": {"type": "number"},
+                    "limit": {"type": "integer"},
                 },
-                handler=self._search_products,
-            )
-        )
-        self.register(
-            ToolDefinition(
-                name="get_product",
-                description="Detail d'un produit par ID ou slug.",
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "product_id": {"type": "string"},
-                        "slug": {"type": "string"},
-                    },
+            },
+            handler=self._search_products,
+        ))
+        self.register(ToolDefinition(
+            name="get_product",
+            description="Detail d'un produit par ID ou slug.",
+            parameters={"type": "object", "properties": {
+                "product_id": {"type": "string"}, "slug": {"type": "string"}}},
+            handler=self._get_product,
+        ))
+        self.register(ToolDefinition(
+            name="suggest_pc_build",
+            description="Configuration PC compatible selon usage et budget en Ariary.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "usage": {"type": "string",
+                              "description": "gaming | bureautique | creation | streaming"},
+                    "budget": {"type": "number"},
                 },
-                handler=self._get_product,
-            )
-        )
-        self.register(
-            ToolDefinition(
-                name="suggest_pc_build",
-                description=(
-                    "Propose une configuration PC compatible selon usage et budget en Ariary."
-                ),
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "usage": {
-                            "type": "string",
-                            "description": "gaming | bureautique | creation | streaming",
-                        },
-                        "budget": {
-                            "type": "number",
-                            "description": "Budget maximum en Ariary (MGA)",
-                        },
-                    },
-                    "required": ["usage", "budget"],
+                "required": ["usage", "budget"],
+            },
+            handler=self._suggest_pc_build,
+        ))
+        self.register(ToolDefinition(
+            name="create_support_ticket",
+            description="Cree un ticket support pour l'utilisateur authentifie.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "description": {"type": "string"},
+                    "priority": {"type": "string",
+                                 "enum": ["low", "medium", "high", "urgent"]},
                 },
-                handler=self._suggest_pc_build,
-            )
-        )
-        self.register(
-            ToolDefinition(
-                name="create_support_ticket",
-                description="Cree un ticket support technique pour l'utilisateur authentifie.",
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "description": {"type": "string"},
-                        "priority": {
-                            "type": "string",
-                            "enum": ["low", "medium", "high", "urgent"],
-                        },
-                    },
-                    "required": ["title", "description"],
-                },
-                handler=self._create_support_ticket,
-            )
-        )
-        self.register(
-            ToolDefinition(
-                name="list_categories",
-                description="Liste les categories du catalogue L'AMI.",
-                parameters={"type": "object", "properties": {}},
-                handler=self._list_categories,
-            )
-        )
-        self.register(
-            ToolDefinition(
-                name="add_to_cart",
-                description=(
-                    "Ajoute des produits au panier (apres confirmation utilisateur). "
-                    "Retourne cart_items pour le frontend."
-                ),
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "items": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "product_id": {"type": "string"},
-                                    "name": {"type": "string"},
-                                    "price": {"type": "number"},
-                                    "quantity": {"type": "integer"},
-                                    "image": {"type": "string"},
-                                },
-                            },
-                        },
-                    },
-                    "required": ["items"],
-                },
-                handler=self._add_to_cart,
-            )
-        )
+                "required": ["title", "description"],
+            },
+            handler=self._create_support_ticket,
+        ))
+        self.register(ToolDefinition(
+            name="list_categories",
+            description="Liste les categories du catalogue L'AMI.",
+            parameters={"type": "object", "properties": {}},
+            handler=self._list_categories,
+        ))
+        self.register(ToolDefinition(
+            name="add_to_cart",
+            description="Prepare l'ajout au panier apres confirmation utilisateur.",
+            parameters={
+                "type": "object",
+                "properties": {"items": {"type": "array", "items": {"type": "object"}}},
+                "required": ["items"],
+            },
+            handler=self._add_to_cart,
+        ))
 
-    async def execute(
-        self,
-        name: str,
-        arguments: dict[str, Any],
-        auth_token: Optional[str] = None,
-        user_id: Optional[str] = None,
-    ) -> ToolCallResult:
+    async def execute(self, name: str, arguments: dict[str, Any],
+                      auth_token: Optional[str] = None,
+                      user_id: Optional[str] = None) -> ToolCallResult:
         tool = self._tools.get(name)
         if not tool:
-            return ToolCallResult(
-                name=name,
-                arguments=arguments,
-                result={"error": f"Outil inconnu: {name}"},
-            )
+            return ToolCallResult(name=name, arguments=arguments,
+                                  result={"error": f"Outil inconnu: {name}"})
         try:
-            result = await tool.handler(
-                arguments,
-                auth_token=auth_token,
-                user_id=user_id,
-            )
+            result = await tool.handler(arguments, auth_token=auth_token, user_id=user_id)
             return ToolCallResult(name=name, arguments=arguments, result=result)
         except Exception as exc:
-            return ToolCallResult(
-                name=name,
-                arguments=arguments,
-                result={"error": str(exc)},
-            )
+            logger.warning("Outil %s en erreur : %s", name, exc)
+            return ToolCallResult(name=name, arguments=arguments,
+                                  result={"error": f"{type(exc).__name__}: {exc}"})
 
     def extract_products(self, tool_results: list[ToolCallResult]) -> list[ProductCard]:
         cards: list[ProductCard] = []
@@ -200,11 +179,15 @@ class ToolRegistry(ToolPort):
             data = tc.result
             if not isinstance(data, dict) or data.get("error"):
                 continue
-            items = data.get("products") or data.get("items") or []
-            if isinstance(data.get("product"), dict):
-                items = [data["product"]]
-            if data.get("build") and isinstance(data["build"], list):
+            items: list[Any] = []
+            if isinstance(data.get("build"), list):
                 items = data["build"]
+            elif isinstance(data.get("product"), dict):
+                items = [data["product"]]
+            else:
+                items = data.get("products") or data.get("items") or []
+            if not isinstance(items, list):
+                continue
             for p in items:
                 if not isinstance(p, dict):
                     continue
@@ -212,149 +195,76 @@ class ToolRegistry(ToolPort):
                 if not pid or pid in seen:
                     continue
                 seen.add(pid)
-                cards.append(
-                    ProductCard(
-                        id=pid,
-                        name=str(p.get("name") or ""),
-                        brand=str(p.get("brand") or ""),
-                        price=float(p.get("price") or 0),
-                        stock=int(p.get("stock") or 0),
-                        image=p.get("image") or (p.get("images") or [None])[0],
-                        slug=p.get("slug"),
-                        rating=p.get("rating"),
-                    )
-                )
+                try:
+                    rating = float(p.get("rating")) if p.get("rating") is not None else None
+                except (TypeError, ValueError):
+                    rating = None
+                cards.append(ProductCard(
+                    id=pid,
+                    name=str(p.get("name") or ""),
+                    brand=str(p.get("brand") or ""),
+                    price=_price(p),
+                    stock=_stock(p),
+                    image=_first_image(p),
+                    slug=p.get("slug") if isinstance(p.get("slug"), str) else None,
+                    rating=rating,
+                ))
         return cards
 
-    # ---- HTTP helpers ----
-
+    # ---- HTTP (tickets uniquement) ----
     def _headers(self, auth_token: Optional[str] = None) -> dict[str, str]:
         h = {"Content-Type": "application/json", "Accept": "application/json"}
         if auth_token:
             h["Authorization"] = f"Bearer {auth_token}"
         return h
 
-    async def _get_json(self, url: str, params: Optional[dict] = None, auth_token: Optional[str] = None) -> Any:
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            res = await client.get(url, params=params or {}, headers=self._headers(auth_token))
-            if res.status_code >= 400:
-                return {"error": f"HTTP {res.status_code}", "detail": res.text[:300]}
-            return res.json()
-
-    async def _post_json(self, url: str, body: dict, auth_token: Optional[str] = None) -> Any:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            res = await client.post(url, json=body, headers=self._headers(auth_token))
-            if res.status_code >= 400:
-                return {"error": f"HTTP {res.status_code}", "detail": res.text[:300]}
-            return res.json()
-
-    def _unwrap(self, payload: Any) -> Any:
-        if isinstance(payload, dict) and "data" in payload:
-            return payload["data"]
-        return payload
-
     # ---- Handlers ----
-
     async def _search_products(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
-        params: dict[str, Any] = {"limit": int(args.get("limit") or 5)}
-        if args.get("search"):
-            params["search"] = args["search"]
-        if args.get("category"):
-            params["category"] = args["category"]
-        if args.get("max_price") is not None:
-            params["max_price"] = args["max_price"]
-        raw = await self._get_json(
-            f"{self.settings.catalog_url}/api/v1/catalog/products",
-            params=params,
-            auth_token=auth_token,
-        )
-        data = self._unwrap(raw)
-        products = data if isinstance(data, list) else (data.get("items") if isinstance(data, dict) else [])
-        # Filtre budget local de securite
+        cache = await get_catalog_cache()
         max_p = args.get("max_price")
-        if max_p is not None and products:
-            products = [p for p in products if float(p.get("price") or 0) <= float(max_p)]
-        return {"products": products or [], "count": len(products or [])}
+        try:
+            max_p = float(max_p) if max_p is not None else None
+        except (TypeError, ValueError):
+            max_p = None
+        products = await cache.search(
+            query=str(args.get("search") or ""),
+            category=args.get("category"),
+            max_price=max_p,
+            limit=int(args.get("limit") or 5),
+        )
+        return {"products": products, "count": len(products)}
 
     async def _get_product(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
-        pid = args.get("product_id")
-        slug = args.get("slug")
-        if pid:
-            raw = await self._get_json(
-                f"{self.settings.catalog_url}/api/v1/catalog/products/{pid}",
-                auth_token=auth_token,
-            )
-        elif slug:
-            raw = await self._get_json(
-                f"{self.settings.catalog_url}/api/v1/catalog/products/slug/{slug}",
-                auth_token=auth_token,
-            )
-        else:
+        pid = str(args.get("product_id") or "")
+        slug = str(args.get("slug") or "")
+        if not pid and not slug:
             return {"error": "product_id ou slug requis"}
-        data = self._unwrap(raw)
-        return {"product": data}
+        cache = await get_catalog_cache()
+        p = cache.find(product_id=pid, slug=slug)
+        if p is None:
+            return {"error": "Produit introuvable"}
+        return {"product": {k: v for k, v in p.items() if not k.startswith("_")}}
 
     async def _suggest_pc_build(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
-        usage = str(args.get("usage") or "bureautique").lower()
-        budget = float(args.get("budget") or 0)
-        if budget <= 0:
-            return {"error": "budget invalide"}
-        # Categories cibles selon usage
-        targets = {
-            "gaming": ["CPU", "GPU", "RAM", "Stockage", "Alimentation", "Boitier"],
-            "bureautique": ["CPU", "RAM", "Stockage", "Alimentation"],
-            "creation": ["CPU", "GPU", "RAM", "Stockage", "Alimentation"],
-            "streaming": ["CPU", "GPU", "RAM", "Stockage", "Alimentation"],
-        }
-        cats = targets.get(usage, targets["bureautique"])
-        # Allocation budget simple
-        weights = {
-            "CPU": 0.25, "GPU": 0.35, "RAM": 0.12, "Stockage": 0.12,
-            "Alimentation": 0.10, "Boitier": 0.06,
-        }
-        build = []
-        total = 0.0
-        for cat in cats:
-            share = weights.get(cat, 0.1)
-            max_price = budget * share * 1.15
-            raw = await self._get_json(
-                f"{self.settings.catalog_url}/api/v1/catalog/products",
-                params={"category": cat, "max_price": max_price, "limit": 3, "sort_by": "price"},
-                auth_token=auth_token,
-            )
-            data = self._unwrap(raw)
-            products = data if isinstance(data, list) else (data.get("items") if isinstance(data, dict) else [])
-            if not products:
-                # fallback search by name
-                raw2 = await self._get_json(
-                    f"{self.settings.catalog_url}/api/v1/catalog/products",
-                    params={"search": cat, "limit": 3},
-                    auth_token=auth_token,
-                )
-                data2 = self._unwrap(raw2)
-                products = data2 if isinstance(data2, list) else (data2.get("items") if isinstance(data2, dict) else [])
-            if products:
-                # prend le meilleur sous budget restant
-                remaining = budget - total
-                candidates = [p for p in products if float(p.get("price") or 0) <= remaining]
-                pick = candidates[-1] if candidates else None
-                if pick is None and products and float(products[0].get("price") or 0) <= remaining:
-                    pick = products[0]
-                if pick:
-                    build.append(pick)
-                    total += float(pick.get("price") or 0)
-        return {
-            "usage": usage,
-            "budget": budget,
-            "total": total,
-            "within_budget": total <= budget,
-            "build": build,
-            "count": len(build),
-        }
+        """Configurateur PC : delegation au moteur de compatibilite materielle."""
+        from app.infrastructure.pc_compat import assemble_build
 
-    async def _create_support_ticket(
-        self, args: dict, auth_token: Optional[str] = None, user_id: Optional[str] = None, **_
-    ) -> dict:
+        usage = str(args.get("usage") or "bureautique").lower()
+        if usage in ("montage", "montage video", "video"):
+            usage = "creation"
+        try:
+            budget = float(args.get("budget") or 0)
+        except (TypeError, ValueError):
+            budget = 0.0
+        if budget <= 0:
+            return {"error": "budget invalide", "build": [], "total": 0,
+                    "estimated_total": 0, "count": 0, "slots_filled": 0}
+
+        cache = await get_catalog_cache()
+        return assemble_build(cache, usage, budget)
+
+    async def _create_support_ticket(self, args: dict, auth_token: Optional[str] = None,
+                                     user_id: Optional[str] = None, **_) -> dict:
         if not auth_token:
             return {"error": "Authentification requise pour creer un ticket"}
         body = {
@@ -363,39 +273,57 @@ class ToolRegistry(ToolPort):
             "priority": args.get("priority") or "medium",
             "category": "technical",
         }
-        raw = await self._post_json(
-            f"{self.settings.ticket_url}/api/v1/tickets",
-            body=body,
-            auth_token=auth_token,
-        )
-        data = self._unwrap(raw)
+        url = f"{self.settings.ticket_url.rstrip('/')}/api/v1/tickets"
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                res = await client.post(url, json=body, headers=self._headers(auth_token))
+        except Exception as exc:
+            return {"error": f"Service ticket injoignable ({type(exc).__name__})"}
+
+        if res.status_code >= 400:
+            return {"error": f"HTTP {res.status_code}", "detail": res.text[:200]}
+        try:
+            payload = res.json()
+        except Exception:
+            return {"error": "Reponse ticket illisible"}
+
+        data = payload.get("data", payload) if isinstance(payload, dict) else payload
+        if isinstance(data, dict) and data.get("error"):
+            return {"error": str(data["error"])}
+        if not isinstance(data, dict) or not (data.get("id") or data.get("_id")):
+            return {"error": "Ticket non cree (reponse inattendue)"}
         return {"ticket": data}
 
     async def _list_categories(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
-        raw = await self._get_json(
-            f"{self.settings.catalog_url}/api/v1/catalog/categories",
-            auth_token=auth_token,
-        )
-        data = self._unwrap(raw)
-        return {"categories": data if isinstance(data, list) else []}
+        cache = await get_catalog_cache()
+        cats = cache.categories()
+        return {"categories": cats, "count": len(cats)}
 
     async def _add_to_cart(self, args: dict, auth_token: Optional[str] = None, **_) -> dict:
+        """Prepare l'ajout au panier (le panier reel vit cote frontend/Zustand).
+
+        IMPORTANT : on conserve stock / brand / slug / image dans les items,
+        sinon les cartes produit affichees apres confirmation indiquent
+        a tort "Rupture" (stock absent => 0).
+        """
         items = args.get("items") or []
-        if not items:
+        if not isinstance(items, list) or not items:
             return {"error": "Aucun article", "count": 0, "items": []}
-        # Le panier est gere cote frontend (Zustand) + sync user service.
-        # On renvoie les items normalises pour cart_added.
         normalized = []
         for it in items:
+            if not isinstance(it, dict):
+                continue
             normalized.append({
                 "product_id": str(it.get("product_id") or it.get("id") or ""),
                 "name": str(it.get("name") or ""),
-                "price": float(it.get("price") or 0),
+                "price": _price(it),
                 "quantity": int(it.get("quantity") or 1),
-                "image": it.get("image") or "",
+                "image": _first_image(it) or "",
+                "stock": int(float(it.get("stock"))) if it.get("stock") is not None else 0,
+                "brand": str(it.get("brand") or ""),
+                "slug": it.get("slug") if isinstance(it.get("slug"), str) else None,
             })
         return {"items": normalized, "count": len(normalized), "ok": True}
-
 
 _registry: Optional[ToolRegistry] = None
 

@@ -1,5 +1,4 @@
 """Point d'entree FastAPI — Service IA L'AMI."""
-
 from __future__ import annotations
 
 import logging
@@ -8,8 +7,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import __version__
+from app.application.chat_history import close_chat_history
 from app.core.config import get_settings
 from app.infrastructure.embeddings import get_embedding_service
+from app.infrastructure.llm import close_llm_client
 from app.infrastructure.seed import seed_knowledge_base
 from app.infrastructure.vector_store import close_vector_store, get_vector_store
 from app.interfaces.routes import router
@@ -39,6 +41,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    await close_llm_client()
+    await close_chat_history()
     await close_vector_store()
     logger.info("Arret IA Service")
 
@@ -47,7 +51,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title=settings.app_name,
-        version="2.0.0",
+        version=__version__,
         description=(
             "Service IA L'AMI — Assistant conversationnel "
             "(LLM + RAG + Function Calling) — Clean Architecture"
@@ -77,7 +81,7 @@ def create_app() -> FastAPI:
     async def root():
         return {
             "service": "lami-ia",
-            "version": "2.0.0",
+            "version": __version__,
             "docs": "/docs",
             "health": "/api/v1/ia/health",
         }

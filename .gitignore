@@ -85,3 +85,18 @@ logs/
 **/sentence_transformers/
 **/huggingface/
 backend/services/ia.zip
+# --- lami: hygiene IA ---
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.backup*/
+*_dump.txt
+ia_code.txt
+ia_context.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

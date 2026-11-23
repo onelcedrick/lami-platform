@@ -83,6 +83,7 @@ class ChatResponse(BaseModel):
     conversation_id: str
     reply: str
     mode: str
+    intent: str = ""
     sources: list[SourceDocument] = Field(default_factory=list)
     tool_calls: list[ToolCallResult] = Field(default_factory=list)
     products: list[ProductCard] = Field(default_factory=list)
