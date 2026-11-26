@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
 
 interface LazyImageProps {
@@ -7,27 +6,39 @@ interface LazyImageProps {
   alt: string;
   className?: string;
   fallbackText?: string;
-  /** Miniature floutée (LQIP) affichée pendant le chargement */
   placeholder?: string;
-  /** Remplit le parent en position absolute (utile avec aspect-ratio CSS) */
   fill?: boolean;
-  /** Ratio d'aspect ("1/1", "16/9"...) — force un wrapper ratio */
   aspectRatio?: string;
-  /** Tailles responsives passées au navigateur */
   sizes?: string;
-  /** Désactive le lazy loading pour les images above-the-fold */
   priority?: boolean;
 }
 
 const SHIMMER =
   "absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent dark:via-white/10";
 
-function useImagePrefetch() {
-  return (src: string) => {
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      requestIdleCallback(() => { const img = new Image(); img.src = src; });
-    }
+/** Classes statiques : Tailwind JIT ne genere pas les classes interpolees. */
+const ASPECT_CLASS: Record<string, string> = {
+  "1/1": "aspect-square",
+  "16/9": "aspect-video",
+  "4/3": "aspect-[4/3]",
+  "3/2": "aspect-[3/2]",
+  "3/4": "aspect-[3/4]",
+  "21/9": "aspect-[21/9]",
+};
+
+const prefetched = new Set<string>();
+
+function prefetchImage(src: string) {
+  if (typeof window === "undefined" || !src || prefetched.has(src)) return;
+  prefetched.add(src);
+  const run = () => {
+    const img = new Image();
+    img.src = src;
   };
+  const ric = (window as Window & { requestIdleCallback?: (cb: () => void) => void })
+    .requestIdleCallback;
+  if (ric) ric(run);
+  else setTimeout(run, 0);
 }
 
 export default function LazyImage({
@@ -46,7 +57,11 @@ export default function LazyImage({
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
-  // Intersection Observer — charge l'image seulement quand elle approche du viewport
+  useEffect(() => {
+    setLoaded(false);
+    setError(false);
+  }, [src]);
+
   useEffect(() => {
     if (priority || !wrapperRef.current) return;
     const el = wrapperRef.current;
@@ -66,18 +81,7 @@ export default function LazyImage({
   }, [priority]);
 
   const hasSrc = !!src && !error;
-  const showSkeleton = !loaded && hasSrc;
 
-  const wrapperClass = [
-    "relative overflow-hidden bg-slate-100 dark:bg-slate-800",
-    aspectRatio ? `aspect-[${aspectRatio}]` : "",
-    fill ? "absolute inset-0" : "",
-    className,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  // -------- État erreur / pas de src --------
   if (!hasSrc) {
     return (
       <div
@@ -91,10 +95,23 @@ export default function LazyImage({
     );
   }
 
+  const wrapperClass = [
+    "relative overflow-hidden bg-slate-100 dark:bg-slate-800",
+    aspectRatio ? ASPECT_CLASS[aspectRatio] ?? "" : "",
+    fill ? "absolute inset-0" : "",
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div ref={wrapperRef} className={wrapperClass} onMouseEnter={() => src && useImagePrefetch()(src)}>
-      {/* Placeholder LQIP (blur) */}
+    <div
+      ref={wrapperRef}
+      className={wrapperClass}
+      onMouseEnter={() => src && prefetchImage(src)}
+    >
       {placeholder && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={placeholder}
           alt=""
@@ -105,15 +122,14 @@ export default function LazyImage({
         />
       )}
 
-      {/* Skeleton shimmer */}
-      {showSkeleton && !placeholder && (
+      {!loaded && !placeholder && (
         <div className="absolute inset-0 overflow-hidden bg-slate-200 dark:bg-slate-800">
           <div className={SHIMMER} />
         </div>
       )}
 
-      {/* Image réelle */}
       {inView && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
           alt={alt}
@@ -123,7 +139,7 @@ export default function LazyImage({
           onLoad={() => setLoaded(true)}
           onError={() => setError(true)}
           className={`h-full w-full object-cover transition-opacity duration-500 ${
-            loaded ? "opacity-100 animate-fade-in" : "opacity-0"
+            loaded ? "opacity-100" : "opacity-0"
           }`}
         />
       )}

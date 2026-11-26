@@ -64,7 +64,7 @@ def create_app() -> FastAPI:
         allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=[
+        allow_headers=["X-Request-Id", 
             "Content-Type",
             "Authorization",
             "X-Session-Id",

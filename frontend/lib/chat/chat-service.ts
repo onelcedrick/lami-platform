@@ -1,198 +1,166 @@
 /**
- * ============================================================
- * SERVICE API CHAT — Couche d'accès aux données
- * ============================================================
- *
- * RESPONSABILITÉ UNIQUE : communiquer avec le backend IA.
- * Ce module ne connaît rien du DOM, de React, ni des composants.
- * Il retourne des données brutes ou lève des erreurs.
- *
- * Avantages :
- *  - Si l'URL du backend change → modifier UN SEUL fichier
- *  - Testable en isolation (mock fetch)
- *  - Réutilisable par d'autres composants (admin, etc.)
+ * Couche d'acces API du chat IA.
+ * - X-Request-Id : idempotence cote backend (pas de doublon au rejeu)
+ * - timeout aligne sur CHAT_TIMEOUT_S du service IA (25 s)
+ * - annulation propagee (bouton Arreter / demontage)
+ * - erreurs HTTP traduites en messages utilisateur
  */
-
 import type {
+  ChatHealth,
   ChatRequestPayload,
   ChatResponsePayload,
   ConversationDetail,
   ConversationSummary,
 } from "./chat-types";
 
-// ============================================================
-// CONFIGURATION
-// ============================================================
-
-/** URL de base du backend (Gateway ou service IA direct) */
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-/** Préfixe des routes IA */
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const IA_PREFIX = "/api/v1/ia";
+const CHAT_TIMEOUT = 25_000;
+const READ_TIMEOUT = 12_000;
 
-/** Timeout par défaut pour les appels API (60 secondes) */
-const DEFAULT_TIMEOUT = 60_000;
+export class ChatAbortError extends Error {
+  constructor() {
+    super("Generation arretee.");
+    this.name = "ChatAbortError";
+  }
+}
 
-// ============================================================
-// HELPERS INTERNES
-// ============================================================
+export class ChatTimeoutError extends Error {
+  constructor() {
+    super("Le service IA met trop de temps a repondre. Reessayez.");
+    this.name = "ChatTimeoutError";
+  }
+}
 
-/**
- * Construit les headers HTTP pour un appel API.
- * Inclut le token d'authentification et l'ID de session anonyme.
- *
- * @returns Objet headers prêt pour fetch
- */
-function buildHeaders(): Record<string, string> {
+export function newRequestId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getSessionId(): string {
+  let sessionId = localStorage.getItem("lami-ia-session");
+  if (!sessionId) {
+    sessionId = `anon-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    localStorage.setItem("lami-ia-session", sessionId);
+  }
+  return sessionId;
+}
+
+function buildHeaders(extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...(extra || {}),
   };
-
-  // ID de session anonyme (pour les visiteurs non connectés)
-  // Généré une seule fois et stocké dans localStorage
   if (typeof window !== "undefined") {
-    let sessionId = localStorage.getItem("lami-ia-session");
-    if (!sessionId) {
-      sessionId = `anon-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2, 11)}`;
-      localStorage.setItem("lami-ia-session", sessionId);
-    }
-    headers["X-Session-Id"] = sessionId;
-
-    // Token JWT si l'utilisateur est connecté
+    headers["X-Session-Id"] = getSessionId();
     const token = localStorage.getItem("access_token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
+    if (token) headers["Authorization"] = `Bearer ${token}`;
   }
-
   return headers;
 }
 
-/**
- * Effectue un appel fetch avec timeout et gestion d'erreur.
- *
- * @param url     - URL complète de la requête
- * @param options - Options fetch (method, body, etc.)
- * @returns       - Données JSON parsées
- * @throws        - Erreur avec message explicite si échec
- */
-async function apiFetch<T>(
-  url: string,
-  options: RequestInit = {}
-): Promise<T> {
-  // AbortController pour gérer le timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...buildHeaders(),
-        ...options.headers,
-      },
-      signal: controller.signal,
-    });
-
-    // Si le serveur renvoie une erreur HTTP
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "Erreur inconnue");
-      throw new Error(
-        `Erreur HTTP ${response.status} : ${errorText.slice(0, 200)}`
-      );
-    }
-
-    return (await response.json()) as T;
-  } catch (error) {
-    // Transformation des erreurs réseau en messages explicites
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error(
-        "Le service IA met trop de temps à répondre. Réessayez."
-      );
-    }
-    if (error instanceof TypeError) {
-      throw new Error(
-        "Impossible de contacter le service IA. Vérifiez votre connexion."
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
+function httpMessage(status: number, body: string): string {
+  switch (status) {
+    case 401:
+      return "Connectez-vous pour continuer cette conversation.";
+    case 403:
+      return "Cette conversation ne vous appartient pas.";
+    case 404:
+      return "Conversation introuvable ou expiree.";
+    case 422:
+      return "Message invalide (vide ou trop long).";
+    case 429:
+      return "Le service IA est tres sollicite. Reessayez dans quelques secondes.";
+    default:
+      if (status >= 500) return "Le service IA a rencontre une erreur interne.";
+      return `Erreur HTTP ${status}${body ? ` : ${body.slice(0, 160)}` : ""}`;
   }
 }
 
-// ============================================================
-// API PUBLIQUE — Méthodes du service
-// ============================================================
+interface FetchOptions {
+  method?: string;
+  body?: string;
+  timeout?: number;
+  signal?: AbortSignal;
+  headers?: Record<string, string>;
+}
 
-/**
- * Service Chat : expose toutes les méthodes pour interagir
- * avec le backend IA. Chaque méthode correspond à un endpoint.
- */
+async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, opts.timeout ?? READ_TIMEOUT);
+
+  const forward = () => controller.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort();
+    else opts.signal.addEventListener("abort", forward);
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}${IA_PREFIX}${path}`, {
+      method: opts.method ?? "GET",
+      body: opts.body,
+      headers: buildHeaders(opts.headers),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(httpMessage(res.status, text));
+    }
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  } catch (error) {
+    if (timedOut) throw new ChatTimeoutError();
+    if (controller.signal.aborted) throw new ChatAbortError();
+    if (error instanceof TypeError) {
+      throw new Error("Impossible de contacter le service IA. Verifiez votre connexion.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    if (opts.signal) opts.signal.removeEventListener("abort", forward);
+  }
+}
+
 export const chatService = {
-  /**
-   * Envoie un message au chatbot IA.
-   * C'est la méthode principale du chat.
-   *
-   * @param payload - Message + contexte + conversation
-   * @returns       - Réponse de l'IA (reply, sources, produits…)
-   */
-  async sendMessage(
-    payload: ChatRequestPayload
+  sendMessage(
+    payload: ChatRequestPayload,
+    opts: { requestId?: string; signal?: AbortSignal } = {}
   ): Promise<ChatResponsePayload> {
-    return apiFetch<ChatResponsePayload>(
-      `${API_BASE}${IA_PREFIX}/chat`,
-      {
-        method: "POST",
-        body: JSON.stringify(payload),
-      }
-    );
-  },
-
-  /**
-   * Récupère la liste des conversations de l'utilisateur.
-   * Utilisé pour afficher l'historique dans la sidebar.
-   */
-  async listConversations(): Promise<ConversationSummary[]> {
-    return apiFetch<ConversationSummary[]>(
-      `${API_BASE}${IA_PREFIX}/conversations`
-    );
-  },
-
-  /**
-   * Récupère le détail d'une conversation (tous les messages).
-   * Utilisé quand l'utilisateur clique sur une conversation existante.
-   *
-   * @param id - ID de la conversation
-   */
-  async getConversation(id: string): Promise<ConversationDetail> {
-    return apiFetch<ConversationDetail>(
-      `${API_BASE}${IA_PREFIX}/conversations/${encodeURIComponent(id)}`
-    );
-  },
-
-  /**
-   * Supprime une conversation et tous ses messages.
-   *
-   * @param id - ID de la conversation à supprimer
-   */
-  async deleteConversation(id: string): Promise<void> {
-    await apiFetch(`${API_BASE}${IA_PREFIX}/conversations/${encodeURIComponent(id)}`, {
-      method: "DELETE",
+    return apiFetch<ChatResponsePayload>("/chat", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      timeout: CHAT_TIMEOUT,
+      signal: opts.signal,
+      headers: { "X-Request-Id": opts.requestId || newRequestId() },
     });
   },
 
-  /**
-   * Vérifie que le service IA est opérationnel.
-   * Utile pour le health check au chargement du widget.
-   */
-  async healthCheck(): Promise<{
-    status: string;
-    documents_count: number;
-  }> {
-    return apiFetch(`${API_BASE}${IA_PREFIX}/health`);
+  listConversations(): Promise<ConversationSummary[]> {
+    return apiFetch<ConversationSummary[]>("/conversations");
+  },
+
+  getConversation(id: string): Promise<ConversationDetail> {
+    return apiFetch<ConversationDetail>(`/conversations/${encodeURIComponent(id)}`);
+  },
+
+  async deleteConversation(id: string): Promise<void> {
+    await apiFetch(`/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+
+  renameConversation(id: string, title: string): Promise<unknown> {
+    return apiFetch(`/conversations/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    });
+  },
+
+  healthCheck(): Promise<ChatHealth> {
+    return apiFetch<ChatHealth>("/health", { timeout: 8_000 });
   },
 };

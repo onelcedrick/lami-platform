@@ -1,44 +1,36 @@
-/**
- * ============================================================
- * HOOK useChat — Logique métier du chatbot
- * ============================================================
- *
- * RESPONSABILITÉ : gérer tout l'état et la logique du chat.
- * Ce hook est indépendant de l'UI (pas de JSX, pas de DOM).
- *
- * Architecture :
- *   ChatWidget (UI) → useChat (logique) → chatService (API)
- *
- * Ce pattern permet de :
- *  - Tester la logique sans rendre de composant
- *  - Réutiliser le hook dans d'autres contextes (admin, mobile)
- *  - Modifier l'API sans toucher à l'UI
- */
-
 "use client";
-
-import { useState, useCallback, useRef } from "react";
-import { chatService } from "@/lib/chat/chat-service";
+/**
+ * Logique du chatbot - sans JSX.
+ * L'ouverture est pilotee par `useChatStore` : le bouton « Demander a l'IA »
+ * d'une page produit ouvre reellement le widget et injecte son message.
+ */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChatAbortError, chatService, newRequestId } from "@/lib/chat/chat-service";
 import type {
   ChatMessage,
-  ChatRequestPayload,
   ChatProduct,
-  ChatSource,
+  ChatRequestPayload,
+  ChatToolCall,
+  ConversationMessageDTO,
   ConversationSummary,
 } from "@/lib/chat/chat-types";
 import { DEFAULT_CHAT_CONFIG } from "@/lib/chat/chat-types";
-import { useCartStore, useAuthStore } from "@/lib/store";
+import { useCartStore } from "@/lib/store";
+import { useChatStore } from "@/lib/chat-store";
 
-// ============================================================
-// UTILITAIRES
-// ============================================================
+const STORAGE_KEY = "lami-chat-id";
 
-/** Génère un identifiant unique pour un message */
+export type ServiceStatus = "unknown" | "online" | "degraded" | "offline";
+
+export interface FailedSend {
+  text: string;
+  context?: ChatRequestPayload["context"];
+}
+
 function generateId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Crée le message d'accueil initial */
 function createWelcomeMessage(): ChatMessage {
   return {
     id: generateId(),
@@ -48,287 +40,370 @@ function createWelcomeMessage(): ChatMessage {
   };
 }
 
-// ============================================================
-// INTERFACE DU HOOK
-// ============================================================
+function firstImage(raw: Record<string, unknown>): string | undefined {
+  const imgs = raw.images;
+  if (Array.isArray(imgs) && typeof imgs[0] === "string" && imgs[0]) return imgs[0];
+  if (typeof imgs === "string" && imgs) return imgs;
+  return typeof raw.image === "string" && raw.image ? raw.image : undefined;
+}
 
-/** Valeur retournée par le hook useChat */
+/** Reconstruit les cartes produit depuis les tool_calls persistes. */
+function productsFromToolCalls(toolCalls: ChatToolCall[]): ChatProduct[] {
+  const out: ChatProduct[] = [];
+  const seen = new Set<string>();
+  for (const tc of toolCalls) {
+    if (!tc.result || typeof tc.result !== "object") continue;
+    const data = tc.result as Record<string, unknown>;
+    if (data.error) continue;
+    let items: unknown[] = [];
+    if (Array.isArray(data.build)) items = data.build;
+    else if (data.product && typeof data.product === "object") items = [data.product];
+    else if (Array.isArray(data.products)) items = data.products;
+    else if (Array.isArray(data.items)) items = data.items;
+    for (const it of items) {
+      if (!it || typeof it !== "object") continue;
+      const p = it as Record<string, unknown>;
+      const id = String(p.id ?? p.product_id ?? "");
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        id,
+        name: String(p.name ?? "Composant"),
+        brand: String(p.brand ?? ""),
+        price: Number(p.price) || 0,
+        stock: Number(p.stock ?? 0) || 0,
+        image: firstImage(p),
+        slug: typeof p.slug === "string" ? p.slug : undefined,
+        rating: typeof p.rating === "number" ? p.rating : undefined,
+      });
+    }
+  }
+  return out;
+}
+
+function fromDTO(m: ConversationMessageDTO): ChatMessage {
+  const toolCalls = m.tool_calls ?? [];
+  return {
+    id: m.id,
+    role: m.role === "user" ? "user" : "assistant",
+    content: m.content,
+    mode: m.mode ?? undefined,
+    sources: m.sources ?? [],
+    toolCalls,
+    products: productsFromToolCalls(toolCalls),
+    cartAdded: m.cart_added ?? 0,
+    timestamp: new Date(m.created_at),
+    status: "sent",
+  };
+}
+
 export interface UseChatReturn {
-  /** Liste ordonnée des messages de la conversation */
   messages: ChatMessage[];
-  /** true si une réponse IA est en cours de génération */
   isLoading: boolean;
-  /** true si le widget de chat est ouvert */
   isOpen: boolean;
-  /** ID de la conversation actuelle (null si nouvelle) */
   conversationId: string | null;
-  /** Liste des conversations passées (pour l'historique) */
   conversations: ConversationSummary[];
-  /** true si l'historique est en cours de chargement */
   historyLoading: boolean;
-  /** true si la vue historique est affichée */
   showHistory: boolean;
-
-  // --- Actions ---
-  /** Envoie un message utilisateur au chatbot */
+  serviceStatus: ServiceStatus;
+  lastFailed: FailedSend | null;
   sendMessage: (text: string, context?: ChatRequestPayload["context"]) => Promise<void>;
-  /** Ouvre le widget de chat */
+  retryLast: () => void;
+  stopGeneration: () => void;
   openChat: () => void;
-  /** Ferme le widget de chat */
   closeChat: () => void;
-  /** Ouvre/ferme le widget */
   toggleChat: () => void;
-  /** Démarre une nouvelle conversation (réinitialise) */
   startNewConversation: () => void;
-  /** Charge une conversation existante depuis l'historique */
   loadConversation: (id: string) => Promise<void>;
-  /** Supprime une conversation */
   deleteConversation: (id: string) => Promise<void>;
-  /** Affiche/masque l'historique */
   toggleHistory: () => void;
-  /** Ajoute un produit au panier depuis une carte produit du chat */
   addProductToCart: (product: ChatProduct) => void;
 }
 
-// ============================================================
-// HOOK PRINCIPAL
-// ============================================================
-
 export function useChat(): UseChatReturn {
-  // ----- État du chat -----
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    createWelcomeMessage(),
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([createWelcomeMessage()]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
-
-  // ----- Historique -----
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [serviceStatus, setServiceStatus] = useState<ServiceStatus>("unknown");
+  const [lastFailed, setLastFailed] = useState<FailedSend | null>(null);
 
-  // ----- Accès aux stores globaux (panier, auth) -----
+  const isOpen = useChatStore((s) => s.open);
+  const storeOpen = useChatStore((s) => s.openChat);
+  const storeClose = useChatStore((s) => s.closeChat);
   const addItemToCart = useCartStore((s) => s.addItem);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
-  // ----- Référence pour éviter les envois multiples -----
-  const isSendingRef = useRef(false);
+  const sendingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const restoredRef = useRef(false);
+  const mountedRef = useRef(true);
+  const messagesRef = useRef(messages);
+  const conversationIdRef = useRef(conversationId);
+  const failedRef = useRef(lastFailed);
+  messagesRef.current = messages;
+  conversationIdRef.current = conversationId;
+  failedRef.current = lastFailed;
 
-  // ============================================================
-  // ENVOI DE MESSAGE
-  // ============================================================
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, []);
 
-  /**
-   * Envoie un message au chatbot et traite la réponse.
-   *
-   * Flux :
-   * 1. Ajouter le message utilisateur à la liste
-   * 2. Appeler l'API IA
-   * 3. Ajouter la réponse de l'assistant
-   * 4. Si des produits ont été ajoutés au panier → synchroniser
-   *
-   * @param text    - Texte du message utilisateur
-   * @param context - Contexte optionnel (produit consulté, etc.)
-   */
+  const loadConversations = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const data = await chatService.listConversations();
+      if (mountedRef.current) setConversations(Array.isArray(data) ? data : []);
+    } catch {
+      if (mountedRef.current) setConversations([]);
+    } finally {
+      if (mountedRef.current) setHistoryLoading(false);
+    }
+  }, []);
+
+  const restore = useCallback(async () => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const id = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+    if (!id) return;
+    try {
+      const detail = await chatService.getConversation(id);
+      if (!mountedRef.current) return;
+      const loaded = (detail.messages ?? []).map(fromDTO);
+      if (loaded.length > 0) {
+        setMessages(loaded);
+        setConversationId(id);
+      }
+    } catch {
+      if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  const refreshHealth = useCallback(async () => {
+    try {
+      const h = await chatService.healthCheck();
+      if (!mountedRef.current) return;
+      setServiceStatus(
+        h.status === "healthy" ? "online" : h.status === "degraded" ? "degraded" : "offline"
+      );
+    } catch {
+      if (mountedRef.current) setServiceStatus("offline");
+    }
+  }, []);
+
   const sendMessage = useCallback(
     async (text: string, context?: ChatRequestPayload["context"]) => {
-      // Garde-fou : pas de message vide, pas d'envoi concurrent
       const trimmed = text.trim();
-      if (!trimmed || isSendingRef.current) return;
+      if (!trimmed || sendingRef.current) return;
+      sendingRef.current = true;
+      setLastFailed(null);
 
-      isSendingRef.current = true;
-
-      // Étape 1 : ajouter le message utilisateur à l'affichage
+      const requestId = newRequestId();
       const userMessage: ChatMessage = {
         id: generateId(),
         role: "user",
         content: trimmed,
         timestamp: new Date(),
-        status: "sent",
+        status: "sending",
+        requestId,
       };
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const recentHistory = messagesRef.current
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-6)
+        .map((m) => ({ role: m.role, content: m.content }));
+
       try {
-        // Étape 2 : construire l'historique récent pour le contexte IA
-        // (les 6 derniers messages pour ne pas surcharger le prompt)
-        const recentHistory = messages
-          .filter((m) => m.role === "user" || m.role === "assistant")
-          .slice(-6)
-          .map((m) => ({ role: m.role, content: m.content }));
+        const response = await chatService.sendMessage(
+          {
+            message: trimmed,
+            conversation_id: conversationIdRef.current ?? undefined,
+            mode: "auto",
+            context,
+            recent_history: recentHistory,
+          },
+          { requestId, signal: controller.signal }
+        );
 
-        // Étape 3 : appeler le service IA
-        const response = await chatService.sendMessage({
-          message: trimmed,
-          conversation_id: conversationId ?? undefined,
-          mode: "auto",
-          context,
-          recent_history: recentHistory,
-        });
-
-        // Étape 4 : stocker l'ID de conversation pour les messages suivants
         if (response.conversation_id) {
+          conversationIdRef.current = response.conversation_id;
           setConversationId(response.conversation_id);
-          localStorage.setItem("lami-chat-id", response.conversation_id);
+          if (typeof window !== "undefined") {
+            localStorage.setItem(STORAGE_KEY, response.conversation_id);
+          }
         }
 
-        // Étape 5 : transformer la réponse API en ChatMessage
         const assistantMessage: ChatMessage = {
           id: generateId(),
           role: "assistant",
-          content: response.reply || "Désolé, une erreur est survenue.",
+          content: response.reply || "Desole, une erreur est survenue.",
           mode: response.mode,
           intent: response.intent,
-          sources: response.sources,
-          toolCalls: response.tool_calls,
-          products: response.products,
-          cartAdded: response.cart_added,
+          sources: response.sources ?? [],
+          toolCalls: response.tool_calls ?? [],
+          products: response.products ?? [],
+          cartAdded: response.cart_added ?? 0,
           timestamp: new Date(),
+          status: "sent",
         };
+        setMessages((prev) =>
+          prev
+            .map((m) => (m.id === userMessage.id ? { ...m, status: "sent" as const } : m))
+            .concat(assistantMessage)
+        );
 
-        setMessages((prev) => [...prev, assistantMessage]);
-
-        // Étape 6 : si le backend a ajouté des articles au panier,
-        // synchroniser avec le store Zustand
-        if (response.cart_added && response.cart_added > 0) {
-          const toolCalls = response.tool_calls || [];
-          for (const tc of toolCalls) {
-            if (
-              (tc.name === "add_to_cart" || tc.name === "add_build_to_cart") &&
-              tc.result &&
-              typeof tc.result === "object" &&
-              "items" in (tc.result as Record<string, unknown>)
-            ) {
-              const items = (tc.result as { items: Array<Record<string, unknown>> }).items;
-              for (const item of items) {
-                if (item.product_id) {
-                  addItemToCart({
-                    productId: String(item.product_id),
-                    name: String(item.name || "Composant"),
-                    price: Number(item.price) || 0,
-                    quantity: Number(item.quantity) || 1,
-                    image: item.image ? String(item.image) : undefined,
-                  });
-                }
-              }
+        if ((response.cart_added ?? 0) > 0) {
+          for (const tc of response.tool_calls ?? []) {
+            if (tc.name !== "add_to_cart" && tc.name !== "add_build_to_cart") continue;
+            if (!tc.result || typeof tc.result !== "object") continue;
+            const items = (tc.result as Record<string, unknown>).items;
+            if (!Array.isArray(items)) continue;
+            for (const raw of items) {
+              if (!raw || typeof raw !== "object") continue;
+              const item = raw as Record<string, unknown>;
+              const pid = String(item.product_id ?? item.id ?? "");
+              if (!pid) continue;
+              addItemToCart({
+                productId: pid,
+                name: String(item.name ?? "Composant"),
+                price: Number(item.price) || 0,
+                quantity: Number(item.quantity) || 1,
+                image: firstImage(item),
+              });
             }
           }
         }
       } catch (error) {
-        // Étape 7 : en cas d'erreur, afficher un message d'erreur
-        // plutôt que de laisser le chat silencieux
-        const errorMessage: ChatMessage = {
-          id: generateId(),
-          role: "error",
-          content:
+        if (error instanceof ChatAbortError) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === userMessage.id ? { ...m, status: "sent" as const } : m))
+          );
+        } else {
+          const content =
             error instanceof Error
               ? error.message
-              : "Le service IA est temporairement indisponible. Réessayez dans un instant.",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, errorMessage]);
+              : "Le service IA est temporairement indisponible. Reessayez dans un instant.";
+          setMessages((prev) =>
+            prev
+              .map((m) => (m.id === userMessage.id ? { ...m, status: "failed" as const } : m))
+              .concat({
+                id: generateId(),
+                role: "error" as const,
+                content,
+                timestamp: new Date(),
+              })
+          );
+          setLastFailed({ text: trimmed, context });
+        }
       } finally {
-        setIsLoading(false);
-        isSendingRef.current = false;
+        sendingRef.current = false;
+        abortRef.current = null;
+        if (mountedRef.current) setIsLoading(false);
       }
     },
-    [messages, conversationId, addItemToCart]
+    [addItemToCart]
   );
 
-  // ============================================================
-  // GESTION DE CONVERSATION
-  // ============================================================
+  const retryLast = useCallback(() => {
+    const failed = failedRef.current;
+    if (!failed || sendingRef.current) return;
+    setMessages((prev) => {
+      const next = [...prev];
+      while (
+        next.length > 0 &&
+        (next[next.length - 1].role === "error" || next[next.length - 1].status === "failed")
+      ) {
+        next.pop();
+      }
+      return next.length > 0 ? next : [createWelcomeMessage()];
+    });
+    setLastFailed(null);
+    void sendMessage(failed.text, failed.context);
+  }, [sendMessage]);
 
-  /** Charge la liste des conversations depuis le backend */
-  const loadConversations = useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const data = await chatService.listConversations();
-      setConversations(data);
-    } catch {
-      // Silencieux : l'historique n'est pas critique
-      setConversations([]);
-    } finally {
-      setHistoryLoading(false);
-    }
+  const stopGeneration = useCallback(() => {
+    abortRef.current?.abort();
   }, []);
 
-  /** Charge une conversation spécifique et affiche ses messages */
+  const openChat = useCallback(() => {
+    storeOpen();
+    void restore();
+    void refreshHealth();
+    void loadConversations();
+  }, [storeOpen, restore, refreshHealth, loadConversations]);
+
+  const closeChat = useCallback(() => {
+    storeClose();
+    setShowHistory(false);
+  }, [storeClose]);
+
+  const toggleChat = useCallback(() => {
+    if (useChatStore.getState().open) closeChat();
+    else openChat();
+  }, [closeChat, openChat]);
+
+  const startNewConversation = useCallback(() => {
+    abortRef.current?.abort();
+    sendingRef.current = false;
+    setIsLoading(false);
+    setMessages([createWelcomeMessage()]);
+    setConversationId(null);
+    conversationIdRef.current = null;
+    setShowHistory(false);
+    setLastFailed(null);
+    if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
+  }, []);
+
   const loadConversation = useCallback(async (id: string) => {
     setHistoryLoading(true);
     try {
       const detail = await chatService.getConversation(id);
-      // Transformer les messages du format backend → ChatMessage
-      const loadedMessages: ChatMessage[] = detail.messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        mode: m.mode,
-        timestamp: new Date(m.created_at),
-      }));
-      setMessages(loadedMessages);
+      const loaded = (detail.messages ?? []).map(fromDTO);
+      setMessages(loaded.length > 0 ? loaded : [createWelcomeMessage()]);
       setConversationId(id);
-      setShowHistory(false); // Retour à la vue chat
+      conversationIdRef.current = id;
+      if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, id);
+      setShowHistory(false);
+      setLastFailed(null);
     } catch {
-      // Si le chargement échoue, ne pas bloquer
+      /* historique non critique */
     } finally {
       setHistoryLoading(false);
     }
   }, []);
 
-  /** Supprime une conversation */
   const deleteConversation = useCallback(async (id: string) => {
     try {
       await chatService.deleteConversation(id);
       setConversations((prev) => prev.filter((c) => c.id !== id));
-      // Si c'était la conversation active, réinitialiser
-      if (conversationId === id) {
+      if (conversationIdRef.current === id) {
         setMessages([createWelcomeMessage()]);
         setConversationId(null);
+        conversationIdRef.current = null;
+        if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
       }
     } catch {
-      // Silencieux
+      /* silencieux */
     }
-  }, [conversationId]);
-
-  // ============================================================
-  // ACTIONS UI
-  // ============================================================
-
-  const openChat = useCallback(() => {
-    setIsOpen(true);
-    // Charger l'historique à l'ouverture
-    loadConversations();
-  }, [loadConversations]);
-
-  const closeChat = useCallback(() => {
-    setIsOpen(false);
-    setShowHistory(false);
-  }, []);
-
-  const toggleChat = useCallback(() => {
-    setIsOpen((prev) => {
-      if (!prev) loadConversations(); // Charger l'historique si on ouvre
-      return !prev;
-    });
-  }, [loadConversations]);
-
-  const startNewConversation = useCallback(() => {
-    setMessages([createWelcomeMessage()]);
-    setConversationId(null);
-    setShowHistory(false);
-    localStorage.removeItem("lami-chat-id");
   }, []);
 
   const toggleHistory = useCallback(() => {
-    setShowHistory((prev) => !prev);
-    if (!showHistory) {
-      loadConversations();
-    }
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next) void loadConversations();
   }, [showHistory, loadConversations]);
 
-  /** Ajoute un produit au panier depuis une carte produit du chat */
   const addProductToCart = useCallback(
     (product: ChatProduct) => {
       addItemToCart({
@@ -342,10 +417,6 @@ export function useChat(): UseChatReturn {
     [addItemToCart]
   );
 
-  // ============================================================
-  // RETOUR
-  // ============================================================
-
   return {
     messages,
     isLoading,
@@ -354,7 +425,11 @@ export function useChat(): UseChatReturn {
     conversations,
     historyLoading,
     showHistory,
+    serviceStatus,
+    lastFailed,
     sendMessage,
+    retryLast,
+    stopGeneration,
     openChat,
     closeChat,
     toggleChat,

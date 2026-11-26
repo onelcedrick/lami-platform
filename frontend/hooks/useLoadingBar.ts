@@ -1,31 +1,23 @@
 "use client";
+import { useCallback, useState } from "react";
 
-import { useEffect, useState } from "react";
-
-/**
- * Hook pour declencher la barre de chargement manuellement.
- *
- * Usage :
- *   const { start, stop } = useLoadingBar();
- *   start();
- *   await fetch(...);
- *   stop();
- */
+/** Declenche la barre globale (memes evenements que lib/api.ts). */
 export function useLoadingBar() {
   const [active, setActive] = useState(false);
 
-  useEffect(() => {
-    // Expose un evenement global pour communiquer avec LoadingBar
-    if (typeof window === "undefined") return;
+  const start = useCallback(() => {
+    setActive(true);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("loading-bar-start"));
+    }
+  }, []);
 
-    const event = new CustomEvent("loading-bar", {
-      detail: { active },
-    });
-    window.dispatchEvent(event);
-  }, [active]);
+  const stop = useCallback(() => {
+    setActive(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("loading-bar-stop"));
+    }
+  }, []);
 
-  return {
-    start: () => setActive(true),
-    stop: () => setActive(false),
-  };
+  return { active, start, stop };
 }
